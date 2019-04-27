@@ -1,7 +1,7 @@
 # Perl Docker Image System #
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/melopt/perl-alt.svg)]()
-[![Docker Build Status](https://img.shields.io/docker/build/melopt/perl-alt.svg)]()
+[![Docker Build Status](https://img.shields.io/github/issues/melo/docker-perl-alt.svg)]()
 
 This set of images provide a full and extensible setup to run your Perl
 applications with Docker.
