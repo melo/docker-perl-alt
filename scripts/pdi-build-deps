@@ -1,0 +1,89 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Getopt::Long;
+
+################################################
+# Usage
+
+sub usage {
+  die <<EOU;
+Usage: pdi-build-deps [<options>]
+
+Uses the cpanfile (and cpanfile.snapshot, if present) files to install
+the Perl dependencies we need.
+
+Supports two modes:
+
+  * app dependencies (the default): installed under /deps;
+  * stack dependencies: installed under /stack
+
+The default is to install app dependencies, use --stack to select to
+install stack dependencies.
+
+Options:
+
+  --help, -?       This message
+
+  --stack          Install dependencies for the stack
+  --skip-snapshot  Ignore the cpanfile.snapshot, even if present
+
+EOU
+}
+
+
+################################################
+# Main logic
+
+### Parse our options and deal with bad ones or --help
+my $ok = GetOptions(\my %opts, 'stack', 'skip-snapshot', 'help|?');
+usage() unless $ok;
+usage() if $opts{help};
+
+
+### We need at least the cpanfile
+die "FATAL: no cpanfile found\n" unless -e 'cpanfile';
+
+
+### Prepare our Carton cmd, decide on final deployment or not
+my @carton_cmd = ('carton', 'install');
+push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e 'cpanfile.snapshot';
+
+
+### Destination dir for deps depends on app or stack mode
+my $deps_dir = $opts{stack} ? '/stack' : '/deps';
+
+
+### Prepare the cpanfiles required
+system('/bin/sh', '-c', "cp cpanfile* $deps_dir");
+chdir($deps_dir);
+
+
+### Take care of running Carton, twice
+print "\n\n*** First run '@carton_cmd'\n\n";
+run_carton();
+
+print "\n\n*** ERROR: command '@carton_cmd' exit code ", ($? >> 8), ", retrying\n\n";
+run_carton();
+
+
+### If we end up here, we could not execute Carton sucessfuly, dump log and die
+print "\n\n*** ERROR: command '@carton_cmd' exit code ", ($? >> 8), ", second failure, aborting\n";
+print "             build.log output follows:\n\n";
+system('/bin/cat', "$ENV{HOME}/.cpanm/build.log");
+print "\n\n*** End of build.log file\n\n";
+
+exit(1);
+
+
+################################################
+# Helpers
+
+sub run_carton {
+  system(@carton_cmd);
+  if ($? == 0) {
+    exec('/bin/rm', '-rf', 'local/cache', "$ENV{HOME}/.cpanm*");
+    die "FATAL: failed to exec() '/bin/rm': $?";
+  }
+}
