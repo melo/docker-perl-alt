@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# Default entrypoint script
+#
+
+set -e
+
+## Run the App setup if ENV PERL_APP_SETUP is present
+if [ -n "$PDI_UPDATE_DEPS" ] ; then
+  pdi-build-deps
+fi
+
+## And execute our real command
+if [ -n "$*" ] ; then
+  exec "$@"
+else
+  exec /bin/sh
+fi
