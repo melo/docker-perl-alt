@@ -9,18 +9,21 @@ use Getopt::Long;
 
 sub usage {
   die <<EOU;
-Usage: pdi-build-deps [<options>]
+Usage: pdi-build-deps [<options>] [<cpanfile>]
 
 Uses the cpanfile (and cpanfile.snapshot, if present) files to install
 the Perl dependencies we need.
 
-Supports two modes:
+You can use a different name ('cpanfile' is only the default) by passing
+along the file as a parameter (the <cpanfile> in the usage above).
+
+This script supports two modes:
 
   * app dependencies (the default): installed under /deps;
   * stack dependencies: installed under /stack
 
-The default is to install app dependencies, use --stack to select to
-install stack dependencies.
+The default is to install app dependencies, use --stack to install stack
+dependencies.
 
 Options:
 
@@ -41,14 +44,17 @@ my $ok = GetOptions(\my %opts, 'stack', 'skip-snapshot', 'help|?');
 usage() unless $ok;
 usage() if $opts{help};
 
+my $cpanfile = $ARGV[0] || 'cpanfile';
+my $snapshot = "${cpanfile}.snapshot";
+
 
 ### We need at least the cpanfile
-die "FATAL: no cpanfile found\n" unless -e 'cpanfile';
+die "FATAL: no '$cpanfile' file found\n" unless -e $cpanfile;
 
 
 ### Prepare our Carton cmd, decide on final deployment or not
 my @carton_cmd = ('carton', 'install');
-push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e 'cpanfile.snapshot';
+push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;
 
 
 ### Destination dir for deps depends on app or stack mode
@@ -56,7 +62,9 @@ my $deps_dir = $opts{stack} ? '/stack' : '/deps';
 
 
 ### Prepare the cpanfiles required
-system('/bin/sh', '-c', "cp cpanfile* $deps_dir");
+system('/bin/sh', '-c', "cp '$cpanfile' $deps_dir/cpanfile");
+if (-e $snapshot) { system('/bin/sh', '-c', "cp '$snapshot' $deps_dir/cpanfile.snapshot") }
+else              { system('/bin/rm', "$deps_dir/cpanfile.snapshot") }
 chdir($deps_dir);
 
 
