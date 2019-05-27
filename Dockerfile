@@ -11,7 +11,7 @@ RUN apk --no-cache add curl wget perl make ca-certificates zlib libressl \
 COPY scripts/ /usr/bin/
 RUN  chmod +x /usr/bin/pdi-*
 
-ENV PERL5LIB=/app/lib:/deps/local/lib/perl5:/stack/local/lib/perl5
+ENV PERL5LIB=/app/lib:/deps/local/lib/perl5:/stack/lib:/stack/local/lib/perl5
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 WORKDIR /app
