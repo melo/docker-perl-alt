@@ -27,4 +27,7 @@ RUN apk --no-cache add build-base zlib-dev perl-dev libressl-dev \
 ## The Devel version
 FROM build AS devel
 
+ENV PERL5LIB=$PERL5LIB:/app/.docker-perl-local/lib/perl5
+ENV PATH=$PATH:/app/.docker-perl-local/bin
+
 ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
