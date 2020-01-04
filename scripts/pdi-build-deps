@@ -53,7 +53,8 @@ die "FATAL: no '$cpanfile' file found\n" unless -e $cpanfile;
 
 
 ### Prepare our cpm cmd, decide on final deployment or not
-my @cmd = ('cpm', 'install', '--workers', 10, '-L', 'local/', '--no-prebuilt', '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb', '--no-test');
+my @cmd = ('cpm', 'install', '--workers', 10, '-L', 'local/', '--no-prebuilt', '--no-test');
+push @cmd, '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb' if -d '/mirror';
 push @cmd, '--verbose' if $opts{verbose};
 
 
