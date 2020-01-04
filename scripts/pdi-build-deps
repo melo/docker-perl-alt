@@ -4,6 +4,13 @@ use strict;
 use warnings;
 use Getopt::Long;
 
+my @package2apk = (
+  'DBD::mysql' => ['mariadb-connector-c', 'mariadb-connector-c-dev'],
+  'DBD::Pg' => [''],
+  'XML::LibXML' => []
+);
+
+
 ################################################
 # Usage
 
@@ -52,6 +59,9 @@ my $snapshot = "${cpanfile}.snapshot";
 die "FATAL: no '$cpanfile' file found\n" unless -e $cpanfile;
 
 
+## Install apk's we know about, automagically
+scan_cpanfile_for_apk_deps($cpanfile);
+
 ### Prepare our Carton cmd, decide on final deployment or not
 my @carton_cmd = ('carton', 'install');
 push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;
@@ -83,6 +93,14 @@ system('/bin/cat', "$ENV{HOME}/.cpanm/build.log");
 print "\n\n*** End of build.log file\n\n";
 
 exit(1);
+
+
+####
+# Scan cpanfile for modules that require external deps, add them
+
+sub scan_cpanfile_for_apk_deps {
+  
+}
 
 
 ################################################
