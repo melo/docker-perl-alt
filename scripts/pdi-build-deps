@@ -40,7 +40,7 @@ EOU
 # Main logic
 
 ### Parse our options and deal with bad ones or --help
-my $ok = GetOptions(\my %opts, 'stack', 'skip-snapshot', 'help|?');
+my $ok = GetOptions(\my %opts, 'stack', 'skip-snapshot', 'verbose', 'help|?');
 usage() unless $ok;
 usage() if $opts{help};
 
@@ -52,9 +52,9 @@ my $snapshot = "${cpanfile}.snapshot";
 die "FATAL: no '$cpanfile' file found\n" unless -e $cpanfile;
 
 
-### Prepare our Carton cmd, decide on final deployment or not
-my @carton_cmd = ('carton', 'install');
-push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;
+### Prepare our cpm cmd, decide on final deployment or not
+my @cmd = ('cpm', 'install', '--workers', 10, '-L', 'local/', '--no-prebuilt', '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb', '--no-test');
+push @cmd, '--verbose' if $opts{verbose};
 
 
 ### Destination dir for deps depends on app or stack mode
@@ -62,24 +62,24 @@ my $deps_dir = $opts{stack} ? '/stack' : '/deps';
 
 
 ### Prepare the cpanfiles required
-system('/bin/sh', '-c', "cp '$cpanfile' $deps_dir/cpanfile");
-if (-e $snapshot) { system('/bin/sh', '-c', "cp '$snapshot' $deps_dir/cpanfile.snapshot") }
-else              { system('/bin/rm', "$deps_dir/cpanfile.snapshot") }
+system('/bin/cp', $cpanfile, "$deps_dir/cpanfile");
+if (-e $snapshot and !$opts{'skip-snapshot'}) { system('/bin/cp', $snapshot, "$deps_dir/cpanfile.snapshot") }
+else                                          { system('/bin/rm', "$deps_dir/cpanfile.snapshot") }
 chdir($deps_dir);
 
 
-### Take care of running Carton, twice
-print "\n\n*** First run '@carton_cmd'\n\n";
-run_carton();
+### Take care of running cpm, twice
+print "\n\n*** First run '@cmd'\n\n";
+run_cmd();
 
-print "\n\n*** ERROR: command '@carton_cmd' exit code ", ($? >> 8), ", retrying\n\n";
-run_carton();
+print "\n\n*** ERROR: command '@cmd' exit code ", ($? >> 8), ", retrying\n\n";
+run_cmd();
 
 
-### If we end up here, we could not execute Carton sucessfuly, dump log and die
-print "\n\n*** ERROR: command '@carton_cmd' exit code ", ($? >> 8), ", second failure, aborting\n";
+### If we end up here, we could not execute cpm sucessfuly, dump log and die
+print "\n\n*** ERROR: command '@cmd' exit code ", ($? >> 8), ", second failure, aborting\n";
 print "             build.log output follows:\n\n";
-system('/bin/cat', "$ENV{HOME}/.cpanm/build.log");
+system('/bin/cat', "$ENV{HOME}/.perl-cpm/build.log");
 print "\n\n*** End of build.log file\n\n";
 
 exit(1);
@@ -88,10 +88,10 @@ exit(1);
 ################################################
 # Helpers
 
-sub run_carton {
-  system(@carton_cmd);
+sub run_cmd {
+  system(@cmd);
   if ($? == 0) {
-    exec('/bin/rm', '-rf', 'local/cache', "$ENV{HOME}/.cpanm*");
+    exec('/bin/rm', '-rf', 'local/cache', "$ENV{HOME}/.cpanm*", "$ENV{HOME}/.perl-cpm*");
     die "FATAL: failed to exec() '/bin/rm': $?";
   }
 }
