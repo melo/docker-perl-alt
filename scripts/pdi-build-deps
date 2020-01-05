@@ -78,7 +78,8 @@ my $deps_dir = $opts{stack} ? '/stack' : '/deps';
 
 ### Prepare the cpanfiles required
 system('/bin/cp', $cpanfile, "$deps_dir/cpanfile");
-else                                          { system('/bin/rm', '-f', "$deps_dir/cpanfile.snapshot") }
+if   (-e $snapshot and !$opts{'skip-snapshot'}) { system('/bin/cp', $snapshot, "$deps_dir/cpanfile.snapshot") }
+else                                            { system('/bin/rm', '-f',      "$deps_dir/cpanfile.snapshot") }
 chdir($deps_dir);
 
 
