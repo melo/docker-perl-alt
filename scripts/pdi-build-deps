@@ -55,8 +55,17 @@ my $snapshot = "${cpanfile}.snapshot";
 die "FATAL: no '$cpanfile' file found\n" unless -e $cpanfile;
 
 
+### Try to use a dynamic number of workers based on the server available CPUs
+my $workers = 4;                                                            ## the CPM default
+my $cpuinfo = do { local $/; open(my $fh, '<', '/proc/cpuinfo'); <$fh> };
+if ($cpuinfo) {
+  my @cores = $cpuinfo =~ m/^(processor)\s*:\s*\d+$/gsm;
+  $workers = @cores * 2;
+}
+
+
 ### Prepare our cmds, decide on final deployment or just recreate the snapshot
-my @cpm_cmd = ('cpm', 'install', '--workers', 10, '-L', 'local/', '--no-prebuilt', '--no-test');
+my @cpm_cmd = ('cpm', 'install', '--workers', $workers, '-L', 'local/', '--no-prebuilt', '--no-test');
 push @cpm_cmd, '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb' if -d '/mirror';
 push @cpm_cmd, '--verbose' if $opts{verbose};
 
