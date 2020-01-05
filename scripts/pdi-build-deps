@@ -52,10 +52,13 @@ my $snapshot = "${cpanfile}.snapshot";
 die "FATAL: no '$cpanfile' file found\n" unless -e $cpanfile;
 
 
-### Prepare our cpm cmd, decide on final deployment or not
-my @cmd = ('cpm', 'install', '--workers', 10, '-L', 'local/', '--no-prebuilt', '--no-test');
-push @cmd, '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb' if -d '/mirror';
-push @cmd, '--verbose' if $opts{verbose};
+### Prepare our cmds, decide on final deployment or just recreate the snapshot
+my @cpm_cmd = ('cpm', 'install', '--workers', 10, '-L', 'local/', '--no-prebuilt', '--no-test');
+push @cpm_cmd, '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb' if -d '/mirror';
+push @cpm_cmd, '--verbose' if $opts{verbose};
+
+my @carton_cmd = ('carton', 'install');
+push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;
 
 
 ### Destination dir for deps depends on app or stack mode
@@ -65,34 +68,63 @@ my $deps_dir = $opts{stack} ? '/stack' : '/deps';
 ### Prepare the cpanfiles required
 system('/bin/cp', $cpanfile, "$deps_dir/cpanfile");
 if (-e $snapshot and !$opts{'skip-snapshot'}) { system('/bin/cp', $snapshot, "$deps_dir/cpanfile.snapshot") }
-else                                          { system('/bin/rm', "$deps_dir/cpanfile.snapshot") }
+else                                          { system('/bin/rm', '-f', "$deps_dir/cpanfile.snapshot") }
 chdir($deps_dir);
 
 
-### Take care of running cpm, twice
-print "\n\n*** First run '@cmd'\n\n";
-run_cmd();
-
-print "\n\n*** ERROR: command '@cmd' exit code ", ($? >> 8), ", retrying\n\n";
-run_cmd();
+### Take care of running cpm to install eveything, first time with felling
+print "\n\n*** First run - install stuff using '@cpm_cmd'\n\n";
+my $error = run_cmd(@cpm_cmd);
 
 
-### If we end up here, we could not execute cpm sucessfuly, dump log and die
-print "\n\n*** ERROR: command '@cmd' exit code ", ($? >> 8), ", second failure, aborting\n";
-print "             build.log output follows:\n\n";
-system('/bin/cat', "$ENV{HOME}/.perl-cpm/build.log");
-print "\n\n*** End of build.log file\n\n";
+### If we don't get a perfect build, we retry the same command
+### to make sure the build.log is the smallest possible to
+### show off the error, and then we dump it. If the second time
+### the install is perfect, oh well, we'll just move on...
+### Maybe we should die anyway but dump the previous log?
+if ($error) {
+  print "\n\n*** ERROR: command exit code $error, retrying to get a smaller log file\n\n";
+  $error = run_cmd(@cpm_cmd);
 
-exit(1);
+  if ($error) {
+    print "\n\n*** Dumping build.log output:\n\n";
+    system('/bin/cat', "$ENV{HOME}/.perl-cpm/build.log");
+    print "\n\n*** End of build.log file\n\n";
+    exit(1);
+  }
+
+  print "\n\n*** Hmms... Second run of '@cpm_cmd' was ok, go figure... Continuing...\n\n";
+}
+
+
+### All is well with the world, so lets use Carton to generate the
+### cpanfile.snapshot -- please note that we only do this if
+### --skip-snapshot if used, because in that case we don't use the snapshot,
+### we want to recreate it
+
+if ($opts{'skip-snapshot'}) {
+  print "\n*** Running Carton to generate cpanfile.snapshot\n\n";
+  $ok = run_cmd(@carton_cmd);
+  unless ($ok) {
+    print "\n\n*** ERROR: command exit code $ok, dumping log file:\n\n";
+    system('/bin/cat', "$ENV{HOME}/.cpanm/build.log");
+    print "\n\n*** End of build.log file\n\n";
+    exit(1);
+  }
+}
+
+
+### Final cleanup
+print "\n\n*** Deps instalation complete, cleaning up...\n\n";
+exec('/bin/rm', '-rf', 'local/cache', "$ENV{HOME}/.cpanm*", "$ENV{HOME}/.perl-cpm");
+die "FATAL: failed to exec() '/bin/rm': $!";
 
 
 ################################################
 # Helpers
 
 sub run_cmd {
-  system(@cmd);
-  if ($? == 0) {
-    exec('/bin/rm', '-rf', 'local/cache', "$ENV{HOME}/.cpanm*", "$ENV{HOME}/.perl-cpm*");
-    die "FATAL: failed to exec() '/bin/rm': $?";
-  }
+  system(@_);
+  return 0 if $? == 0;
+  return $? >> 8;
 }
