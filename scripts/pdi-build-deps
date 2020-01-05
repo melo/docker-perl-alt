@@ -104,8 +104,8 @@ if ($error) {
 
 if ($opts{'skip-snapshot'}) {
   print "\n*** Running Carton to generate cpanfile.snapshot\n\n";
-  $ok = run_cmd(@carton_cmd);
-  unless ($ok) {
+  $error = run_cmd(@carton_cmd);
+  if ($error) {
     print "\n\n*** ERROR: command exit code $ok, dumping log file:\n\n";
     system('/bin/cat', "$ENV{HOME}/.cpanm/build.log");
     print "\n\n*** End of build.log file\n\n";
