@@ -123,7 +123,7 @@ if ($error) {
 ### we want to recreate it
 
 if ($opts{'skip-snapshot'}) {
-  print "\n*** Running Carton to generate cpanfile.snapshot\n\n";
+  print "\n*** Running Carton to generate cpanfile.snapshot: '@carton_cmd'\n\n";
   $error = run_cmd(@carton_cmd);
   if ($error) {
     print "\n\n*** ERROR: command exit code $ok, dumping log file:\n\n";
