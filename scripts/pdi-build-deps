@@ -32,6 +32,9 @@ Options:
   --stack          Install dependencies for the stack
   --skip-snapshot  Ignore the cpanfile.snapshot, even if present
 
+  --all            Installl dependencies for all phased, by default
+                   we will skip suggests, configure, and develop
+
 EOU
 }
 
@@ -40,7 +43,7 @@ EOU
 # Main logic
 
 ### Parse our options and deal with bad ones or --help
-my $ok = GetOptions(\my %opts, 'stack', 'skip-snapshot', 'verbose', 'help|?');
+my $ok = GetOptions(\my %opts, 'stack', 'skip-snapshot', 'all', 'verbose', 'help|?');
 usage() unless $ok;
 usage() if $opts{help};
 
@@ -60,6 +63,14 @@ push @cpm_cmd, '--verbose' if $opts{verbose};
 my @carton_cmd = ('carton', 'install');
 push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;
 
+if ($opts{all}) {
+  push @cpm_cmd, '--with-develop', '--with-configure', '--with-suggests';
+}
+else {
+  push @cpm_cmd, '--without-develop', '--without-configure', '--without-suggests';
+  push @carton_cmd, '--without develop,configure,suggests';
+}
+
 
 ### Destination dir for deps depends on app or stack mode
 my $deps_dir = $opts{stack} ? '/stack' : '/deps';
@@ -67,7 +78,6 @@ my $deps_dir = $opts{stack} ? '/stack' : '/deps';
 
 ### Prepare the cpanfiles required
 system('/bin/cp', $cpanfile, "$deps_dir/cpanfile");
-if (-e $snapshot and !$opts{'skip-snapshot'}) { system('/bin/cp', $snapshot, "$deps_dir/cpanfile.snapshot") }
 else                                          { system('/bin/rm', '-f', "$deps_dir/cpanfile.snapshot") }
 chdir($deps_dir);
 
