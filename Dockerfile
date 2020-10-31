@@ -34,6 +34,9 @@ FROM build AS devel
 ENV PERL5LIB=$PERL5LIB:/app/.docker-perl-local/lib/perl5
 ENV PATH=$PATH:/app/.docker-perl-local/bin
 
+COPY cpanfile* /dev_deps/
+RUN cd /dev_deps && pdi-build-deps && rm -rf /dev_deps
+
 ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 
 
