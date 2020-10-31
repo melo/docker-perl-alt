@@ -5,7 +5,7 @@ ARG BASE=3.9
 
 FROM alpine:${BASE} AS runtime
 
-RUN apk --no-cache add curl wget perl make ca-certificates zlib libressl \
+RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl  \
                        zlib expat gnupg libxml2 libxml2-utils jq tzdata  \
     && curl -L https://cpanmin.us | perl - App::cpanminus                \
     && cpanm -n -q Carton App::cpm Path::Tiny autodie                    \
@@ -24,7 +24,7 @@ WORKDIR /app
 ## The Build version
 FROM runtime AS build
 
-RUN apk --no-cache add build-base zlib-dev perl-dev libressl-dev \
+RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
                        expat-dev libxml2-dev perl-test-harness-utils
 
 

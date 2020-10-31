@@ -1,0 +1,12 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+for my $t (qw( next latest )) {
+  my $tag = "xxx:$t";
+  system('docker', 'build', '--tag', $tag,   '--build-arg', "BASE=$t",        '.')   and die;
+  system('docker', 'run',   '-i',    '--rm', $tag,          '/usr/bin/prove', '-lv') and die;
+  system('docker', 'rmi',   $tag);
+  print "\n\n";
+}
