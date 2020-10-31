@@ -37,6 +37,8 @@ ENV PATH=$PATH:/app/.docker-perl-local/bin
 COPY cpanfile* /dev_deps/
 RUN cd /dev_deps && pdi-build-deps && rm -rf /dev_deps
 
+RUN echo 'eval $( pdi-perl-env )' > /etc/profile.d/perl_env.sh
+
 ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 
 
