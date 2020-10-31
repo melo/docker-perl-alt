@@ -1,6 +1,7 @@
 ## The Runtime version
 
-ARG BASE=3.11
+## 3.9 is the latest "safest" version
+ARG BASE=3.9
 
 FROM alpine:${BASE} AS runtime
 
