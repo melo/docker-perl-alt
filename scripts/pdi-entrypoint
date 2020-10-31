@@ -1,18 +1,15 @@
-#!/bin/sh
+#!/usr/bin/env perl
 #
 # Default entrypoint script
 #
 
-set -e
+use strict;
+use warnings;
+use autodie;
 
-## Run the App setup if ENV PERL_APP_SETUP is present
-if [ -n "$PDI_UPDATE_DEPS" ] ; then
-  pdi-build-deps
-fi
+## Update the CPAN deps if PDI_UPDATE_DEPS is present
+system('/usr/bin/pdi-build-deps') if $ENV{PDI_UPDATE_DEPS};
 
-## And execute our real command
-if [ -n "$*" ] ; then
-  exec "$@"
-else
-  exec /bin/sh
-fi
+## Exec the command
+exec(@ARGV) if @ARGV;
+exec('/bin/sh');
