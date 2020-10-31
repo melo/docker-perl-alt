@@ -1,0 +1,25 @@
+#!/usr/bin/env perl
+#
+# Default entrypoint script
+#
+
+use strict;
+use warnings;
+use Path::Tiny;
+
+## Search for submodules
+my $base = path('/app/elib');
+if ($base->is_dir) {
+  my @incs = ('/app/lib');
+  for my $sm ($base->children) {
+    my $sml = $sm->child('lib');
+    next unless $sml->is_dir;
+
+    push @incs, $sml->stringify;
+  }
+
+  $ENV{PERL5LIB} = join(':', @incs, $ENV{PERL5LIB}) if @incs;
+}
+
+print qq{PERL5LIB='$ENV{PERL5LIB}'\nexport PERL5LIB\n};
+
