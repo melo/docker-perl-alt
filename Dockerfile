@@ -31,3 +31,9 @@ ENV PERL5LIB=$PERL5LIB:/app/.docker-perl-local/lib/perl5
 ENV PATH=$PATH:/app/.docker-perl-local/bin
 
 ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
+
+
+## The Repl version
+FROM devel AS repl
+
+RUN /usr/local/bin/cpm install --no-test Reply && rm -rf /root/.perl-cpm
