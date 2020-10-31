@@ -1,8 +1,12 @@
 ## The Runtime version
-FROM alpine:3.9 AS runtime
+
+## 3.9 is the latest "safest" version
+ARG BASE=3.9
+
+FROM alpine:${BASE} AS runtime
 
 RUN apk --no-cache add curl wget perl make ca-certificates zlib libressl \
-                       zlib expat gnupg libxml2 libxml2-utils jq         \
+                       zlib expat gnupg libxml2 libxml2-utils jq tzdata  \
     && curl -L https://cpanmin.us | perl - App::cpanminus                \
     && cpanm -n -q Carton App::cpm Path::Tiny autodie                    \
     && rm -rf ~/.cpanm                                                   \
