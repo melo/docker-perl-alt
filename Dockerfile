@@ -22,6 +22,7 @@ ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/loc
 
 WORKDIR /app
 
+ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 
 ## The Build version
 FROM runtime AS build
@@ -38,8 +39,6 @@ ENV PATH=$PATH:/app/.docker-perl-local/bin
 
 RUN pdi-build-deps --layer=devel  \
     && echo 'eval $( pdi-perl-env )' > /etc/profile.d/perl_env.sh
-
-ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 
 
 ## The Repl version
