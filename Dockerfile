@@ -34,9 +34,6 @@ RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
 ## The Devel version
 FROM build AS devel
 
-ENV PERL5LIB=$PERL5LIB:/app/.docker-perl-local/lib/perl5
-ENV PATH=$PATH:/app/.docker-perl-local/bin
-
 RUN pdi-build-deps --layer=devel  \
     && echo 'eval $( pdi-perl-env )' > /etc/profile.d/perl_env.sh
 
