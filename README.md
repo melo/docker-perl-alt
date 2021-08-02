@@ -139,13 +139,13 @@ FROM package_deps AS devel
 ### included.
 RUN apk --no-cache add jq
 
-### Assuming you have a cpanfile.devel file with all your devel-time
-### dependencies, you can install it with this
-RUN cd /app && pdi-build-deps cpanfile.devel
-
 ### Copy the App dependencies and the app code
 COPY --from=builder /deps/ /deps/
 COPY --from=builder /app/ /app/
+
+### Assuming you have a cpanfile.devel file with all your devel-time
+### dependencies, you can install it with this
+RUN cd /app && pdi-build-deps cpanfile.devel
 
 ### And we are done: this "development" image can be generated with:
 ###
