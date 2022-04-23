@@ -7,6 +7,7 @@ FROM alpine:${BASE} AS runtime
 
 RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl  \
                        zlib expat gnupg libxml2 libxml2-utils jq tzdata  \
+    && apk --no-cache upgrade                                            \
     && curl -L https://cpanmin.us | perl - App::cpanminus                \
     && cpanm -n -q Carton App::cpm Path::Tiny                            \
                    autodie Module::CPANfile CPAN::Meta::Prereqs          \
