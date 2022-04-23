@@ -29,7 +29,7 @@ ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 FROM runtime AS build
 
 RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
-                       expat-dev libxml2-dev perl-test-harness-utils
+                       expat-dev libxml2-dev perl-utils
 
 
 ## The Devel version
