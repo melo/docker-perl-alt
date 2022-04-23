@@ -1,0 +1,21 @@
+#!/usr/bin/env perl
+#
+# Check all Perl scripts under /app/bin and run tests
+#
+
+use strict;
+use Path::Tiny;
+
+my $bin = path('/app/bin');
+my $bin_it = $bin->iterator;
+while (my $f = $bin_it->()) {
+  if (-x "$f") {
+    system($^X, '-I/app/lib', '-wc', "$f") and die "**** Failed to check script '$f'\n";
+  }
+}
+
+if (-d '/app/t') {
+  chdir('/app');
+  system('prove', '-I/app/lib', 't/') and die "**** Failed tests, check them\n";
+}
+
