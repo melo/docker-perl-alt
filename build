@@ -6,7 +6,7 @@ use autodie;
 
 my $repo = 'melopt/perl-alt';
 
-my @versions = (['latest', 3.9], ['next', 3.12]);
+my @versions = (['latest', 3.9], ['next', 3.15], ['edge', 'edge']);
 
 my @tags;
 for my $spec (@versions) {
