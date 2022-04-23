@@ -38,7 +38,7 @@ Options:
   --layer=X        Install dependencies for layer X
   --skip-snapshot  Ignore the cpanfile.snapshot, even if present
 
-  --all            Installl dependencies for all phased, by default
+  --all            Installl dependencies for all phases. By default
                    we will skip suggests, configure, and develop
 
 EOU
