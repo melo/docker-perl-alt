@@ -3,14 +3,27 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/melopt/perl-alt.svg)
 ![Docker Build Status](https://img.shields.io/github/issues/melo/docker-perl-alt.svg)
 
-This set of images provide a full and extensible setup to run your Perl
+This set of images provides a full and extensible setup to run your Perl
 applications with Docker.
 
-There are two versions of the image:
+There are two main versions of the image:
 
-* a `-build` version that can be used to build your applications;
 * a `-runtime` version that should be used to run the final
-  applications.
+  applications - the final target of your `Dockerfile` should
+  use this one;
+* a `-build` version that can be used to build your applications;
+* a `-devel` version that can be used to debug and develop
+  applications: this is mostly the `-build` version with extra modules.
+
+Each of these is available in combination with an Alpine and the official Perl base images.
+
+| Base Image  | Development | Build | Runtime |
+|-------------|-------------|-------|---------|
+| `alpine:3.9` | `alpine-latest-devel` / `alpine-3.9-devel` | `alpine-latest-build` / `alpine-3.9-build`| `alpine-latest-runtime` / `alpine-3.9-runtime` |
+| `alpine:3.16` | `alpine-next-devel` / `alpine-3.16-devel` | `alpine-next-build` / `alpine-3.16-build`| `alpine-next-runtime` / `alpine-3.16-runtime` |
+| `alpine:edge` | `alpine-edge-devel` | `alpine-edge-build` | `alpine-edge-runtime` |
+| `perl:5.36-slim` | `perl-latest-devel` / `perl-5.36-slim-devel` | `perl-latest-build` / `perl-5.36-slim-build` | `perl-latest-runtime` / `perl-5.36-slim-runtime` |
+| `perl:5.36` | `perl-full-devel` / `perl-5.36-devel` | `perl-full-build` / `perl-5.36-build` | `perl-full-runtime` / `perl-5.36-runtime` |
 
 See below on how to create a Dockerfile for you own project that makes
 full use of this setup, while making sure that you'll end up with the
@@ -19,10 +32,11 @@ smallest possible final image.
 
 ## What's inside? ##
 
-All images are based on Alpine 3.9 and include:
+All images are based on Alpine and Perl images and include:
 
-* [perl-5.26.3](https://metacpan.org/release/perl): this is the system
-  perl included with the base Alpine image;
+* [perl](https://metacpan.org/release/perl):
+  * on Alpine images, we use the system Perl for now, waiting for [official Alpine Perl image](https://github.com/Perl/docker-perl/issues/23);
+  * on Perl-images, 5.36.
 * [cpanm](https://metacpan.org/release/App-cpanminus);
 * [Carton](https://metacpan.org/release/Carton);
 * [App::cpm](https://metacpan.org/release/App-cpm).
@@ -36,25 +50,13 @@ Some common libs and tools are also included:
 * libxml2 and libxml-utils;
 * jq.
 
-The `-devel` versions include the development versions of this
-libraries.
-
-
-## Versions ##
-
-The system is provided with several different flavours. Each of them is
-available with two tags for the `-build` and `-runtime` versions.
-
-| *Flavour* | *Build version* | *Runtime version* | *Notes* |
-|---|---|---|---|
-| Latest | `latest-build` | `latest-runtime` | uses the system perl, includes all the libs and helpers. The `latest` tag is aliased to the `latest-build` version |
-
-Future versions will include more flavours, with custom built Perl versions.
+The `-build` and `-devel` versions include the development
+versions of this libraries.
 
 
 ## Rational ##
 
-The system was designed to have a big, fully feature, build-time image,
+The system was designed to have a big, fully featured, build-time image,
 and another slim runtime image. A third version that you can use during
 development time can be also be created with a small addition to your
 app `Dockerfile`.
@@ -67,7 +69,7 @@ dependencies, and the "stack".
 
 * application is inside `/app`;
 * application dependencies will be installed at `/deps`;
-* stack code and dependencies will be installad at `/stack`;
+* stack code and dependencies will be installed at `/stack`;
 
 The fact that the stack code and dependencies is placed outside the app
 locations allows you to create Docker images with just the stack
@@ -103,7 +105,7 @@ package dependencies, you can just remove those lines altogether.
 ### First stage, just to add our package dependencies. We put this on a
 ### separate stage to be able to reuse them across the "build" and
 ### "devel" phases lower down
-FROM melopt/perl-alt:latest-build AS package_deps
+FROM melopt/perl-alt:alpine-latest-build AS package_deps
 
 ### Add any packaged dependencies that your application might need. Make
 ### sure you use the -devel or -libs package, as this is to be used to
@@ -159,7 +161,7 @@ COPY --from=builder /app/ /app/
 
 ### Now for the fourth and final stage, the runtime edition. We start from the
 ### runtime version and add all the files from the build phase
-FROM melopt/perl-alt:latest-runtime
+FROM melopt/perl-alt:alpine-latest-runtime
 
 ### Add any packaged dependencies that your application might need
 RUN apk --no-cache add postgres-libs
@@ -194,13 +196,13 @@ Below you'll find an example of a Dockerfile for a stack that provides you:
 This is actually available at [melopt/dancer2-xslate-starman](https://hub.docker.com/r/melopt/dancer2-xslate-starman) (repository is at [Github melo/docker-dancer2-xslate-starman](https://www.github.com/melo/docker-dancer2-xslate-starman)). You can check the [`cpanfile` used for the stack](https://github.com/melo/docker-dancer2-xslate-starman/blob/master/cpanfile).
 
 ```Dockerfile
-FROM melopt/perl-alt:latest-build AS builder
+FROM melopt/perl-alt:alpine-latest-build AS builder
 
 COPY cpanfile* /stack/
 RUN cd /stack && pdi-build-deps --stack
 
 
-FROM melopt/perl-alt:latest-runtime
+FROM melopt/perl-alt:alpine-latest-runtime
 
 COPY --from=builder /stack /stack/
 ```
@@ -255,7 +257,7 @@ Another stack, this time to allow users to run Minion workers and the admin inte
 
 ```Dockerfile
 ### Prepare the dependencies
-FROM melopt/perl-alt:latest-build AS builder
+FROM melopt/perl-alt:alpine-latest-build AS builder
 
 RUN apk --no-cache add mariadb-dev postgresql-dev
 
@@ -269,7 +271,7 @@ RUN set -e && cd /stack && for script in bin/* ; do perl -wc $script ; done
 
 
 ### Runtime image
-FROM melopt/perl-alt:latest-runtime
+FROM melopt/perl-alt:alpine-latest-runtime
 
 RUN apk --no-cache add mariadb-client postgresql-libs
 

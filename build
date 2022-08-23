@@ -6,21 +6,24 @@ use autodie;
 
 my $repo = 'melopt/perl-alt';
 
-my @versions = (['latest', 3.9], ['next', 3.15], ['edge', 'edge']);
+my @versions = (
+  ['alpine', 'latest', '3.9'], ['alpine', 'next', '3.16'], ['alpine', 'edge', 'edge'],
+  ['perl',   'latest', '5.36-slim'], ['perl',   'full', '5.36'], 
+);
 
 my @tags;
 for my $spec (@versions) {
-  my ($t, $v) = @$spec;
-  my $baset = "$repo:$t";
-  my $basev = "$repo:$v";
+  my ($f, $t, $v) = @$spec;
+  my $baset = "$repo:$f-$t";
+  my $basev = "$repo:$f-$v";
 
   for my $target (qw( devel build runtime )) {
     my $tagt = "$baset-$target";
     my $tagv = "$basev-$target";
-    print ">>>> target $target, alpine version $v: $tagt\n";
-    print ">>>> target $target, alpine version $v: $tagv\n\n";
+    print ">>>> target $target, base $v: $tagt\n";
+    print ">>>> target $target, base $v: $tagv\n\n";
 
-    system(qw(docker build --target), $target, '--tag', $tagt, '--tag', $tagv, '--build-arg', "BASE=$v", '.');
+    system(qw(docker build --target), $target, '--file', "Dockerfile.$f", '--tag', $tagt, '--tag', $tagv, '--build-arg', "BASE=$f:$v", '.');
     push @tags, $tagt, $tagv;
   }
 
