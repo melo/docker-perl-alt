@@ -38,4 +38,4 @@ $ENV{PERL5LIB} = join(':', grep { $_ } (@incs, $ENV{PERL5LIB}));
 
 ## Exec the command
 exec(@ARGV) if @ARGV;
-for ('/bin/bash', '/bin/sh') {  exec($_) if -x;}
+for ('/bin/bash', '/bin/sh') { exec($_) if -x }
