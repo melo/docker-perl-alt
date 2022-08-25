@@ -27,4 +27,4 @@ if ($base->is_dir) {
 
 ## Exec the command
 exec(@ARGV) if @ARGV;
-exec('/bin/sh');
+for ('/bin/bash', '/bin/sh') {  exec($_) if -x;}
