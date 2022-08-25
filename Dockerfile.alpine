@@ -19,7 +19,6 @@ RUN  chmod +x /usr/bin/pdi-*
 
 COPY cpanfile* /deps/layers/devel/
 
-ENV PERL5LIB=/app/lib:/deps/local/lib/perl5:/stack/lib:/stack/local/lib/perl5
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 WORKDIR /app
