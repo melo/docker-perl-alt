@@ -36,6 +36,11 @@ for my $d ('/deps', '/stack') {
 ## Generate final PERL5LIB
 $ENV{PERL5LIB} = join(':', grep { $_ } (@incs, $ENV{PERL5LIB}));
 
+## Per project entrypoint support :)
+my @entrypoint;
+push @entrypoint, '/entrypoint' if -x '/entrypoint';
+
 ## Exec the command
-exec(@ARGV) if @ARGV;
-for ('/bin/bash', '/bin/sh') { exec($_) if -x }
+exec(@entrypoint, @ARGV) if @ARGV;
+for ('/bin/bash', '/bin/sh') { exec(@entrypoint, $_) if -x }
+die "FATAL: could not find any shell!!!";

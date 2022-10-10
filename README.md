@@ -54,6 +54,19 @@ The `-build` and `-devel` versions include the development
 versions of this libraries.
 
 
+## Entrypoint ##
+
+The system includes a standard ENTRYPOINT script that sets a decent
+`PERL5LIB` based on the assumption that your app libs are under
+`/app/lib`.
+
+It will also check for submodules under `/app/elib/` and include
+all `/app/elib/*/lib` folders in `PERL5LIB`.
+
+Finally, if you need your own ENTRYPOINT script, place an executable
+at `/entrypoint` and it will be executed before the `COMMAND`.
+
+
 ## Rational ##
 
 The system was designed to have a big, fully featured, build-time image,
