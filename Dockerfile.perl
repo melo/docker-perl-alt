@@ -7,6 +7,7 @@ FROM ${BASE} AS runtime
 RUN apt-get update                                                                   \
     && apt-get install -y --no-install-recommends                                    \
           curl wget make zlib1g libssl1.1 libexpat1 gnupg libxml2 libxml2-utils jq   \
+    && apt-get upgrade                                                               \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false  \
     && rm -fr /var/cache/apt/* /var/lib/apt/lists/*                                  \
     && cpm install -g Carton Path::Tiny autodie Module::CPANfile CPAN::Meta::Prereqs \
@@ -31,6 +32,7 @@ FROM runtime AS build
 RUN apt-get update                                                                  \
     && apt-get install -y --no-install-recommends                                   \
           build-essential zlib1g-dev libssl-dev libexpat1-dev libxml2-dev           \
+    && apt-get upgrade                                                              \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -fr /var/cache/apt/* /var/lib/apt/lists/*                                 
 
