@@ -54,6 +54,69 @@ The `-build` and `-devel` versions include the development
 versions of this libraries.
 
 
+### Lambda Support (Experimental) ###
+
+The Lambda support is still experimental. It seems to work fine but we
+are not using it in production at this moment.
+
+The support includes testing your functions locally using the
+[AWS Lambda Runtime Interface Emulator][AWS-RIE].
+
+Most of the Lambda logic is provided by the excellent [AWS::Lambda][]
+Perl module. Kudos to Shogo Ichinose for this.
+
+Your handlers should be placed in the `lambda-handlers/` of your
+project, or if you prefer, `/var/task`. Make sure your `.pl` handlers
+are executable.
+
+A sample handler (named `functions.pl`) looks like this:
+
+```
+#!perl
+
+use strict;
+use warnings;
+use JSON::MaybeXS;
+
+sub echo {
+  my ($payload, $context) = @_;
+
+  return encode_json({ payload => $payload, context => { %$context } });
+}
+
+1;
+```
+
+The name of this function is `functions.echo`. The first part,
+`functions`, is the name of the handler file, `functions.pl`. The second
+part, `echo`, is the name of the sub called in that file. See
+[AWS::Lambda][] for details on writting Lambda handlers.
+
+To test the function locally, build your image then run run it like this:
+
+```
+$ docker run --rm -it -p 9000:8080 your_image your_handler.your_function
+10 Dec 2022 16:31:26,839 [INFO] (rapid) exec '/var/runtime/bootstrap' (cwd=/app, handler=your_handler.your_function)
+10 Dec 2022 16:31:36,015 [INFO] (rapid) extensionsDisabledByLayer(/opt/disable-extensions-jwigqn8j) -> stat /opt/disable-extensions-jwigqn8j: no such file or directory
+10 Dec 2022 16:31:36,015 [WARNING] (rapid) Cannot list external agents error=open /opt/extensions: no such file or directory
+```
+
+You can then test with:
+```
+$ curl -XPOST 'http://localhost:9000/2015-03-31/functions/function/invocations' -d '{}'
+```
+
+The logs will show something like this:
+
+```
+START RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b Version: $LATEST
+END RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b
+REPORT RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b	Init Duration: 0.36 ms	Duration: 63.70 ms	Billed Duration: 64 ms	Memory Size: 3008 MB	Max Memory Used: 3008 MB
+```
+
+For a fully working example see [test/lambda][lambda-test] inside our repository.
+
+
 ## Entrypoint ##
 
 The system includes a standard ENTRYPOINT script that sets a decent
@@ -302,3 +365,8 @@ This image source repository is at [https://github.com/melo/docker-perl-alt](htt
 # Author #
 
 Pedro Melo [melo@simplicidade.org](mailto:melo@simplicidade.org)
+
+
+[AWS-RIE]: https://github.com/aws/aws-lambda-runtime-interface-emulator
+[AWS::Lambda]: https://metacpan.org/pod/AWS::Lambda
+[lambda-test]: https://github.com/melo/docker-perl-alt/tree/master/test/lambda

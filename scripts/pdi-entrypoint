@@ -40,7 +40,53 @@ $ENV{PERL5LIB} = join(':', grep { $_ } (@incs, $ENV{PERL5LIB}));
 my @entrypoint;
 push @entrypoint, '/entrypoint' if -x '/entrypoint';
 
+## Lambda support!
+my $lambda_handlers  = path('/app/lambda-handlers');
+my $lambda_runtime   = path($ENV{LAMBDA_RUNTIME_DIR} || '/var/runtime');
+my $lambda_task_root = path($ENV{LAMBDA_TASK_ROOT}   || '/var/task');
+
+$lambda_task_root->mkdir;
+my $it = $lambda_handlers->iterator;
+while (my $f = $it->()) {
+  $f->copy($lambda_task_root->child($f->basename));
+}
+
+my $lambda_env_type  = running_in_lambda($lambda_handlers, @ARGV);
+if ($lambda_env_type) {
+  $ENV{PDI_LAMBDA_ENV_TYPE} = $lambda_env_type;
+  $ENV{LAMBDA_TASK_ROOT}   ||= "$lambda_task_root";
+  $ENV{LAMBDA_RUNTIME_DIR} ||= "$lambda_runtime";
+
+  push @entrypoint, '/usr/local/bin/aws-lambda-rie' if $lambda_env_type eq 'rie';
+  push @entrypoint, $lambda_runtime->child('bootstrap')->stringify;
+}
+
 ## Exec the command
 exec(@entrypoint, @ARGV) if @ARGV;
 for ('/bin/bash', '/bin/sh') { exec(@entrypoint, $_) if -x }
 die "FATAL: could not find any shell!!!";
+
+
+##############################################
+#### Detect if we are and can run under lambda
+sub running_in_lambda {
+  my (undef, $cmd) = @_;
+  my $has_handler = check_for_lambda_handlers(@_);
+
+  if ($ENV{AWS_LAMBDA_RUNTIME_API}) {
+    die "FATAL: ENV AWS_LAMBDA_RUNTIME_API set, but handler script '$cmd' not found\n" unless $has_handler;
+    return 'aws';
+  }
+  return 'rie' if $ENV{PDI_LAMBDA_EMULATOR};
+  return 'rie' if $has_handler;
+
+  return;
+}
+
+sub check_for_lambda_handlers {
+  my ($lambda_handlers, $cmd) = @_;
+  return unless $lambda_handlers->is_dir;
+  return unless @_ == 2 and $cmd =~ m/^(.+?)\.(.+)/ and $lambda_handlers->child("$1.pl")->exists;
+
+  return 1;
+}
