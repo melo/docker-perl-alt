@@ -25,7 +25,7 @@ Each of these is available in combination with an Alpine and the official Perl b
 | `perl:5.36-slim` | `perl-latest-devel` / `perl-5.36-slim-devel` | `perl-latest-build` / `perl-5.36-slim-build` | `perl-latest-runtime` / `perl-5.36-slim-runtime` |
 | `perl:5.36` | `perl-full-devel` / `perl-5.36-devel` | `perl-full-build` / `perl-5.36-build` | `perl-full-runtime` / `perl-5.36-runtime` |
 
-See below on how to create a Dockerfile for you own project that makes
+See below how to create a Dockerfile for your own project that makes
 full use of this setup, while making sure that you'll end up with the
 smallest possible final image.
 
@@ -43,15 +43,78 @@ All images are based on Alpine and Perl images and include:
 
 Some common libs and tools are also included:
 
-* openssl: this is not the default for Alpine 3.9, but a lof of software
-  fails to buil without it;
-* zlib;
-* expat;
-* libxml2 and libxml-utils;
-* jq.
+* `openssl`: this is not the default for Alpine 3.9, but a lot of software
+  fails to build without it;
+* `zlib`;
+* `expat`;
+* `libxml2` and `libxml-utils`;
+* `jq`.
 
 The `-build` and `-devel` versions include the development
-versions of this libraries.
+versions of these libraries.
+
+
+### Lambda Support (Experimental) ###
+
+The Lambda support is still experimental. It seems to work fine but we
+are not using it in production at this moment.
+
+The support includes testing your functions locally using the
+[AWS Lambda Runtime Interface Emulator][AWS-RIE].
+
+Most of the Lambda logic is provided by the excellent [AWS::Lambda][]
+Perl module. Kudos to Shogo Ichinose for this.
+
+Your handlers should be placed in the `lambda-handlers/` of your
+project, or if you prefer, `/var/task`. Make sure your `.pl` handlers
+are executable.
+
+A sample handler (named `functions.pl`) looks like this:
+
+```
+#!perl
+
+use strict;
+use warnings;
+use JSON::MaybeXS;
+
+sub echo {
+  my ($payload, $context) = @_;
+
+  return encode_json({ payload => $payload, context => { %$context } });
+}
+
+1;
+```
+
+The name of this function is `functions.echo`. The first part,
+`functions`, is the name of the handler file, `functions.pl`. The second
+part, `echo`, is the name of the sub called in that file. See
+[AWS::Lambda][] for details on writing Lambda handlers.
+
+To test the function locally, build your image then run it like this:
+
+```
+$ docker run --rm -it -p 9000:8080 your_image your_handler.your_function
+10 Dec 2022 16:31:26,839 [INFO] (rapid) exec '/var/runtime/bootstrap' (cwd=/app, handler=your_handler.your_function)
+10 Dec 2022 16:31:36,015 [INFO] (rapid) extensionsDisabledByLayer(/opt/disable-extensions-jwigqn8j) -> stat /opt/disable-extensions-jwigqn8j: no such file or directory
+10 Dec 2022 16:31:36,015 [WARNING] (rapid) Cannot list external agents error=open /opt/extensions: no such file or directory
+```
+
+You can then test with:
+```
+$ curl -XPOST 'http://localhost:9000/2015-03-31/functions/function/invocations' -d '{}'
+```
+
+The logs will show something like this:
+
+```
+START RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b Version: $LATEST
+END RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b
+REPORT RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b	Init Duration: 0.36 ms	Duration: 63.70 ms	Billed Duration: 64 ms	Memory Size: 3008 MB	Max Memory Used: 3008 MB
+```
+
+For a fully working example see [test/lambda][lambda-test] inside our repository.
 
 
 ## Entrypoint ##
@@ -71,7 +134,7 @@ at `/entrypoint` and it will be executed before the `COMMAND`.
 
 The system was designed to have a big, fully featured, build-time image,
 and another slim runtime image. A third version that you can use during
-development time can be also be created with a small addition to your
+development time can also be created with a small addition to your
 app `Dockerfile`.
 
 With a Docker multi-stage build, you can use a single Dockerfile to
@@ -84,16 +147,16 @@ dependencies, and the "stack".
 * application dependencies will be installed at `/deps`;
 * stack code and dependencies will be installed at `/stack`;
 
-The fact that the stack code and dependencies is placed outside the app
-locations allows you to create Docker images with just the stack
+The fact that the stack code and dependencies are placed outside the app
+locations allow you to create Docker images with just the stack
 components that you can reuse between multiple projects. See below for
 two sample stacks, one for a Dancer2+Xslate+Starman combo, and another
 to have all the things needed to run a Minion job system.
 
-The reason to split your own app dependencies and your own code is to
-allow you to use a image with your work directory from your laptop
+The reason to split your app dependencies and your code is to
+allow you to use an image with your work directory from your laptop
 mounted under `/app`. If the app dependencies are in `/deps` and only
-your code is under `/apps` you can start a container with a image
+your code is under `/apps` you can start a container with an image
 created from your app Dockerfile, and mount the laptop work directory
 with `docker run` `-v`-option under `/app` and develop with the same
 environment as your deployment environment will look like.
@@ -110,9 +173,9 @@ This is an ordinary application. Dependencies are tracked with
 associate `cpanfile.snapshot`.
 
 You should be able to just copy&paste this sample `Dockerfile` to your
-own app work directory, adjust the `apk add` lines to make sure that you
-add any packaged dependencies you might need. If you don't need any
-package dependencies, you can just remove those lines altogether.
+app work directory, and adapt the `apk add` lines to make sure that
+you add any packaged dependencies you might need. If you don't need
+any package dependencies, you can just remove those lines altogether.
 
 ```Dockerfile
 ### First stage, just to add our package dependencies. We put this on a
@@ -122,7 +185,7 @@ FROM melopt/perl-alt:alpine-latest-build AS package_deps
 
 ### Add any packaged dependencies that your application might need. Make
 ### sure you use the -devel or -libs package, as this is to be used to
-### build your dependencies and app. Tthe postgres-libs shown below is
+### build your dependencies and app. The postgres-libs shown below is
 ### just an example
 RUN apk --no-cache add postgres-libs
 
@@ -204,7 +267,7 @@ Below you'll find an example of a Dockerfile for a stack that provides you:
 
 * Dancer2;
 * Text::Xslate for templating;
-* Starman for web server.
+* Starman for a web server.
 
 This is actually available at [melopt/dancer2-xslate-starman](https://hub.docker.com/r/melopt/dancer2-xslate-starman) (repository is at [Github melo/docker-dancer2-xslate-starman](https://www.github.com/melo/docker-dancer2-xslate-starman)). You can check the [`cpanfile` used for the stack](https://github.com/melo/docker-dancer2-xslate-starman/blob/master/cpanfile).
 
@@ -296,9 +359,14 @@ ENTRYPOINT [ "/stack/bin/minion-entrypoint" ]
 
 # Repository #
 
-This image source repository is at [https://github.com/melo/docker-perl-alt](https://github.com/melo/docker-perl-alt).
+This image source repository is at [https://github.com/melo/docker-perl-alt][repo].
 
 
 # Author #
 
 Pedro Melo [melo@simplicidade.org](mailto:melo@simplicidade.org)
+
+[repo]: https://github.com/melo/docker-perl-alt
+[AWS-RIE]: https://github.com/aws/aws-lambda-runtime-interface-emulator
+[AWS::Lambda]: https://metacpan.org/pod/AWS::Lambda
+[lambda-test]: https://github.com/melo/docker-perl-alt/tree/master/test/lambda

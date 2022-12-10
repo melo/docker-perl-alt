@@ -2,22 +2,42 @@
 
 ARG BASE=perl:5.36-slim
 
+## Path and sig of AWS Lambda runtime emulator
 FROM ${BASE} AS runtime
 
-RUN apt-get update                                                                   \
-    && apt-get install -y --no-install-recommends                                    \
-          curl wget make zlib1g libssl1.1 libexpat1 gnupg libxml2 libxml2-utils jq   \
-    && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false  \
-    && rm -fr /var/cache/apt/* /var/lib/apt/lists/*                                  \
-    && cpm install -g Carton Path::Tiny autodie Module::CPANfile CPAN::Meta::Prereqs \
-                   App::cpm Carton::Snapshot                                         \
-    && rm -rf ~/.cpanm                                                               \
-    && mkdir -p /app /deps /stack
+ENV AWS_LAMBDA_RIE_RELEASE=https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
+ENV AWS_LAMBDA_RIE_SHA256=5de3f634453de2f145d69dd6e490cbc38f6bad00d4da56aa74db33207ebd358c
 
+RUN apt update                                                                       \
+    && apt install -y --no-install-recommends                                        \
+          curl wget make zlib1g libssl1.1 libexpat1 gnupg libxml2 libxml2-utils jq   \
+          build-essential                                                            \
+    && apt upgrade -y                                                                \
+    && cpm install -g Carton Path::Tiny autodie Module::CPANfile CPAN::Meta::Prereqs \
+                   App::cpm Carton::Snapshot AWS::Lambda AWS::XRay                   \
+    && rm -rf ~/.cpanm                                                               \
+    && mkdir -p /app /deps /stack                                                    \
+    && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false      \
+    && apt autoremove -y build-essential                                             \
+    && rm -fr /var/cache/apt/* /var/lib/apt/lists/*
+
+## AWS Lambda Emulator
+RUN mkdir -p /usr/local/bin                                               \
+    && cd /usr/local/bin                                                  \
+    && curl -Lo ./aws-lambda-rie ${AWS_LAMBDA_RIE_RELEASE}                \
+    && chmod +x ./aws-lambda-rie                                          \
+    && echo "SHA256 (aws-lambda-rie) = ${AWS_LAMBDA_RIE_SHA256}" > ./.sig \
+    && shasum -c .sig                                                     \
+    && rm .sig
+
+## All our scripts, layers, and default environment
 COPY scripts/ /usr/bin/
 RUN  chmod +x /usr/bin/pdi-*
 
-COPY cpanfile* /deps/layers/devel/
+COPY bin/lambda-bootstrap /var/runtime/bootstrap
+RUN  chmod 555 /var/runtime/bootstrap
+
+COPY layers/ cpanfile* /deps/layers/
 
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -31,6 +51,7 @@ FROM runtime AS build
 RUN apt-get update                                                                  \
     && apt-get install -y --no-install-recommends                                   \
           build-essential zlib1g-dev libssl-dev libexpat1-dev libxml2-dev           \
+    && apt-get upgrade                                                              \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -fr /var/cache/apt/* /var/lib/apt/lists/*                                 
 

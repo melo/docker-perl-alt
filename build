@@ -3,8 +3,17 @@
 use strict;
 use warnings;
 use autodie;
+use Getopt::Long;
 
-my $repo = 'melopt/perl-alt';
+sub usage {
+  die "Usage: $0 [--push] [--filter=s]\n";
+}
+
+my %cfg = ( repo => 'melopt/perl-alt' );
+GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s') or usage();
+usage() if $cfg{help};
+
+my $repo = $cfg{repo};
 
 my @versions = (
   ['alpine', 'latest', '3.9'], ['alpine', 'next', '3.16'], ['alpine', 'edge', 'edge'],
@@ -20,6 +29,9 @@ for my $spec (@versions) {
   for my $target (qw( devel build runtime )) {
     my $tagt = "$baset-$target";
     my $tagv = "$basev-$target";
+
+    next if $cfg{filter} and $tagt !~ m/$cfg{filter}/;
+
     print ">>>> target $target, base $v: $tagt\n";
     print ">>>> target $target, base $v: $tagv\n\n";
 
@@ -31,6 +43,6 @@ for my $spec (@versions) {
   push @tags, $baset;
 }
 
-if (@ARGV and $ARGV[0] eq 'push') {
+if ($cfg{push}) {
   system('docker', 'push', $_) for @tags;
 }

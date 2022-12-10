@@ -3,6 +3,10 @@
 ## 3.9 is the latest "safest" version
 ARG BASE=alpine:3.9
 
+## Path and sig of AWS Lambda runtime emulator
+ARG AWS_LAMBDA_RIE_RELEASE=https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
+ARG AWS_LAMBDA_RIE_SHA256=5de3f634453de2f145d69dd6e490cbc38f6bad00d4da56aa74db33207ebd358c
+
 FROM ${BASE} AS runtime
 
 RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl  \
@@ -11,13 +15,27 @@ RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl  \
     && curl -L https://cpanmin.us | perl - App::cpanminus                \
     && cpanm -n -q Carton App::cpm Path::Tiny                            \
                    autodie Module::CPANfile CPAN::Meta::Prereqs          \
+                   AWS::Lambda AWS::XRay                                 \
     && rm -rf ~/.cpanm                                                   \
     && mkdir -p /app /deps /stack
 
+## AWS Lambda Emulator
+RUN mkdir -p /usr/local/bin                                             \
+    && cd /usr/local/bin                                                \
+    && curl -Lo ./aws-lambda-rie $AWS_LAMBDA_RIE_RELEASE                \
+    && chmod +x ./aws-lambda-rie                                        \
+    && echo "SHA256 (aws-lambda-rie) = $AWS_LAMBDA_RIE_SHA256" > ./.sig \
+    && shasum -c .sig                                                   \
+    && rm .sig
+
+## All our scripts, layers, and default environment
 COPY scripts/ /usr/bin/
 RUN  chmod +x /usr/bin/pdi-*
 
-COPY cpanfile* /deps/layers/devel/
+COPY bin/lambda-bootstrap /var/runtime/bootstrap
+RUN  chmod 555 /var/runtime/bootstrap
+
+COPY layers/ cpanfile* /deps/layers/
 
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -25,11 +43,13 @@ WORKDIR /app
 
 ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 
+
 ## The Build version
 FROM runtime AS build
 
 RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
-                       expat-dev libxml2-dev perl-utils
+                       expat-dev libxml2-dev perl-utils         \
+    && apk --no-cache upgrade
 
 
 ## The Devel version
