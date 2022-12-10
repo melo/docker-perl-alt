@@ -34,7 +34,7 @@ for my $d ('/deps', '/stack') {
 }
 
 ## Generate final PERL5LIB
-$ENV{PERL5LIB} = join(':', grep { $_ } (@incs, $ENV{PERL5LIB}));
+$ENV{PERL5LIB} = join(':', grep {$_} (@incs, $ENV{PERL5LIB}));
 
 ## Per project entrypoint support :)
 my @entrypoint;
