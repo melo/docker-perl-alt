@@ -62,9 +62,13 @@ if ($lambda_env_type) {
 }
 
 ## Exec the command
-exec(@entrypoint, @ARGV) if @ARGV;
+if (@ARGV) {
+  exec(@entrypoint, @ARGV);
+  die "FATAL: failed to exec '@ARGV': $!\n";
+}
+
 for ('/bin/bash', '/bin/sh') { exec(@entrypoint, $_) if -x }
-die "FATAL: could not find any shell!!!";
+die "FATAL: could not find any shell!!!\n";
 
 
 ##############################################
