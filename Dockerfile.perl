@@ -18,7 +18,7 @@ RUN apt-get update                                                              
 COPY scripts/ /usr/bin/
 RUN  chmod +x /usr/bin/pdi-*
 
-COPY cpanfile* /deps/layers/devel/
+COPY layers/ cpanfile* /deps/layers/
 
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
