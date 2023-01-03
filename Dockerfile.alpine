@@ -5,7 +5,7 @@ ARG BASE=alpine:3.9
 
 ## Path and sig of AWS Lambda runtime emulator
 ARG AWS_LAMBDA_RIE_RELEASE=https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
-ARG AWS_LAMBDA_RIE_SHA256=5de3f634453de2f145d69dd6e490cbc38f6bad00d4da56aa74db33207ebd358c
+ARG AWS_LAMBDA_RIE_SHA256=129f33c8e0a475c88cf8a8a28e225e07a6b998438ac70f342600716e17a92cb1
 
 FROM ${BASE} AS runtime
 

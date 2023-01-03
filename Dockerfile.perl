@@ -6,7 +6,7 @@ ARG BASE=perl:5.36-slim
 FROM ${BASE} AS runtime
 
 ENV AWS_LAMBDA_RIE_RELEASE=https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
-ENV AWS_LAMBDA_RIE_SHA256=5de3f634453de2f145d69dd6e490cbc38f6bad00d4da56aa74db33207ebd358c
+ENV AWS_LAMBDA_RIE_SHA256=129f33c8e0a475c88cf8a8a28e225e07a6b998438ac70f342600716e17a92cb1
 
 RUN apt update                                                                       \
     && apt install -y --no-install-recommends                                        \
