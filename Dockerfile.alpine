@@ -25,9 +25,10 @@ RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl  \
 RUN mkdir -p /usr/local/bin                                             \
     && cd /usr/local/bin                                                \
     && curl -Lo ./aws-lambda-rie $AWS_LAMBDA_RIE_RELEASE                \
+    && sha256sum ./aws-lambda-rie                                       \
     && chmod +x ./aws-lambda-rie                                        \
-    && echo "SHA256 (aws-lambda-rie) = $AWS_LAMBDA_RIE_SHA256" > ./.sig \
-    && shasum -c .sig                                                   \
+    && echo "$AWS_LAMBDA_RIE_SHA256  aws-lambda-rie" > ./.sig           \
+    && sha256sum -c .sig                                                \
     && rm .sig
 
 ## All our scripts, layers, and default environment
