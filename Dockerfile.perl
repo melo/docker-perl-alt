@@ -2,12 +2,13 @@
 
 ARG BASE=perl:5.36-slim
 
-## Path and sig of AWS Lambda runtime emulator
 FROM ${BASE} AS runtime
 
+## Path and sig of AWS Lambda runtime emulator
 ENV AWS_LAMBDA_RIE_RELEASE=https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
 ENV AWS_LAMBDA_RIE_SHA256=129f33c8e0a475c88cf8a8a28e225e07a6b998438ac70f342600716e17a92cb1
 
+## The main event...
 RUN apt update                                                                       \
     && apt install -y --no-install-recommends                                        \
           curl wget make zlib1g libssl1.1 libexpat1 gnupg libxml2 libxml2-utils jq   \
