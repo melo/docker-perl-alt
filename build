@@ -17,32 +17,49 @@ my $repo = $cfg{repo};
 
 my @versions = (
   ['alpine', 'latest', '3.9'], ['alpine', 'next', '3.16'], ['alpine', 'edge', 'edge'],
-  ['perl',   'latest', '5.36-slim'], ['perl',   'full', '5.36'], 
+  ['perl',   'latest', '5.36-slim', 1], ['perl',   'full', '5.36'],
 );
 
 my @tags;
 for my $spec (@versions) {
-  my ($f, $t, $v) = @$spec;
+  my ($f, $t, $v, $x) = @$spec;
   my $baset = "$repo:$f-$t";
   my $basev = "$repo:$f-$v";
 
   for my $target (qw( devel build runtime reply )) {
     my $tagt = "$baset-$target";
     my $tagv = "$basev-$target";
+    my $tagx = $x? "$target" : "";
+    my $tagl = $x && $target eq 'runtime'? "latest" : "";
+
 
     next if $cfg{filter} and $tagt !~ m/$cfg{filter}/;
 
     print ">>>> target $target, base $v: $tagt\n";
-    print ">>>> target $target, base $v: $tagv\n\n";
+    print ">>>> target $target, base $v: $tagv\n";
+    print ">>>> also tagged: $tagx\n" if $tagx;
+    print ">>>> also tagged: $tagl\n" if $tagl;
+    print "\n";
 
-    system(qw(docker build --target), $target, '--file', "Dockerfile.$f", '--tag', $tagt, '--tag', $tagv, '--build-arg', "BASE=$f:$v", '.');
-    push @tags, $tagt, $tagv;
+    my @itags = ($tagt, $tagv);
+    push @itags, $tagx if $tagx;
+    push @itags, $tagl if $tagl;
+
+    my $err = my_system(qw(docker build --target), $target, '--file', "Dockerfile.$f", (map { ('--tag', $_) } @itags), '--build-arg', "BASE=$f:$v", '.');
+    die "FATAL: failed to build Docker image\n" if $err;
+
+    push @tags, @itags;
   }
 
-  system(qw(docker tag), "$baset-devel", $baset);
+  my_system(qw(docker tag), "$baset-devel", $baset);
   push @tags, $baset;
 }
 
 if ($cfg{push}) {
-  system('docker', 'push', $_) for @tags;
+  my_system('docker', 'push', $_) for @tags;
+}
+
+sub my_system {
+  print ">>>>>>>> Cmd: @_\n";
+  return system(@_);
 }
