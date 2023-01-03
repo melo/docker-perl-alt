@@ -26,7 +26,7 @@ for my $spec (@versions) {
   my $baset = "$repo:$f-$t";
   my $basev = "$repo:$f-$v";
 
-  for my $target (qw( devel build runtime )) {
+  for my $target (qw( devel build runtime reply )) {
     my $tagt = "$baset-$target";
     my $tagv = "$basev-$target";
 

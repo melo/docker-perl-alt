@@ -63,6 +63,6 @@ RUN pdi-build-deps --layer=devel  \
 
 
 ## The Repl version
-FROM devel AS repl
+FROM devel AS reply
 
 RUN /usr/local/bin/cpm install --no-test Reply && rm -rf /root/.perl-cpm
