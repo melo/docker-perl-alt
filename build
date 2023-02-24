@@ -16,8 +16,12 @@ usage() if $cfg{help};
 my $repo = $cfg{repo};
 
 my @versions = (
-  ['alpine', 'latest', '3.9'], ['alpine', 'next', '3.16'], ['alpine', 'edge', 'edge'],
-  ['perl',   'latest', '5.36-slim', 1], ['perl',   'full', '5.36'],
+  ['alpine', 'latest', '3.17'],
+  ['alpine', 'next',   'edge'],
+  ['alpine', 'edge',   'edge'],
+  ['alpine', 'legacy', '3.9'],
+  ['perl',   'latest', '5.36-slim', 1],
+  ['perl',   'full',   '5.36'],
 );
 
 my @tags;

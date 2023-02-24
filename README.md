@@ -6,7 +6,7 @@
 This set of images provides a full and extensible setup to run your Perl
 applications with Docker.
 
-There are two main versions of the image:
+There are three main versions of the image:
 
 * a `-runtime` version that should be used to run the final
   applications - the final target of your `Dockerfile` should
@@ -19,9 +19,9 @@ Each of these is available in combination with an Alpine and the official Perl b
 
 | Base Image  | Development | Build | Runtime |
 |-------------|-------------|-------|---------|
-| `alpine:3.9` | `alpine-latest-devel` / `alpine-3.9-devel` | `alpine-latest-build` / `alpine-3.9-build`| `alpine-latest-runtime` / `alpine-3.9-runtime` |
-| `alpine:3.16` | `alpine-next-devel` / `alpine-3.16-devel` | `alpine-next-build` / `alpine-3.16-build`| `alpine-next-runtime` / `alpine-3.16-runtime` |
-| `alpine:edge` | `alpine-edge-devel` | `alpine-edge-build` | `alpine-edge-runtime` |
+| `alpine:3.9` | `alpine-legacy-devel` / `alpine-3.9-devel` | `alpine-legacy-build` / `alpine-3.9-build`| `alpine-legacy-runtime` / `alpine-3.9-runtime` |
+| `alpine:3.17` | `alpine-latest-devel` / `alpine-3.17-devel` | `alpine-latest-build` / `alpine-3.17-build`| `alpine-latest-runtime` / `alpine-3.17-runtime` |
+| `alpine:edge` | `alpine-next-devel` / `alpine-edge-devel` | `alpine-next-build` / `alpine-edge-build` | `alpine-next-runtime` / `alpine-edge-runtime` |
 | `perl:5.36-slim` | `perl-latest-devel` / `perl-5.36-slim-devel` | `perl-latest-build` / `perl-5.36-slim-build` | `perl-latest-runtime` / `perl-5.36-slim-runtime` |
 | `perl:5.36` | `perl-full-devel` / `perl-5.36-devel` | `perl-full-build` / `perl-5.36-build` | `perl-full-runtime` / `perl-5.36-runtime` |
 
@@ -35,15 +35,15 @@ smallest possible final image.
 All images are based on Alpine and Perl images and include:
 
 * [perl](https://metacpan.org/release/perl):
-  * on Alpine images, we use the system Perl for now, waiting for [official Alpine Perl image](https://github.com/Perl/docker-perl/issues/23);
-  * on Perl-images, 5.36.
+  * on Alpine images, we use the system Perl, on 3.17 it is 5.36.0;
+  * on Perl-images, currently 5.36.
 * [cpanm](https://metacpan.org/release/App-cpanminus);
 * [Carton](https://metacpan.org/release/Carton);
 * [App::cpm](https://metacpan.org/release/App-cpm).
 
 Some common libs and tools are also included:
 
-* `openssl`: this is not the default for Alpine 3.9, but a lot of software
+* `openssl`: this is not the default for Alpine, but a lot of software
   fails to build without it;
 * `zlib`;
 * `expat`;
@@ -114,7 +114,7 @@ END RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b
 REPORT RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b	Init Duration: 0.36 ms	Duration: 63.70 ms	Billed Duration: 64 ms	Memory Size: 3008 MB	Max Memory Used: 3008 MB
 ```
 
-For a fully working example see [test/lambda][lambda-test] inside our repository.
+For a fully working example see [test/lambda][lambda-test] inside this repository.
 
 
 ## Entrypoint ##
@@ -173,7 +173,7 @@ This is an ordinary application. Dependencies are tracked with
 associate `cpanfile.snapshot`.
 
 You should be able to just copy&paste this sample `Dockerfile` to your
-app work directory, and adapt the `apk add` lines to make sure that
+app work directory, and tweak the `apk add` lines to make sure that
 you add any packaged dependencies you might need. If you don't need
 any package dependencies, you can just remove those lines altogether.
 
