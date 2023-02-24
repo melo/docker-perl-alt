@@ -9,7 +9,7 @@ sub usage {
   die "Usage: $0 [--push] [--filter=s]\n";
 }
 
-my %cfg = ( repo => 'melopt/perl-alt' );
+my %cfg = (repo => 'melopt/perl-alt');
 GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s') or usage();
 usage() if $cfg{help};
 
@@ -33,8 +33,8 @@ for my $spec (@versions) {
   for my $target (qw( devel build runtime reply )) {
     my $tagt = "$baset-$target";
     my $tagv = "$basev-$target";
-    my $tagx = $x? "$target" : "";
-    my $tagl = $x && $target eq 'runtime'? "latest" : "";
+    my $tagx = $x                         ? "$target" : "";
+    my $tagl = $x && $target eq 'runtime' ? "latest"  : "";
 
 
     next if $cfg{filter} and $tagt !~ m/$cfg{filter}/;
@@ -49,7 +49,11 @@ for my $spec (@versions) {
     push @itags, $tagx if $tagx;
     push @itags, $tagl if $tagl;
 
-    my $err = my_system(qw(docker build --target), $target, '--file', "Dockerfile.$f", (map { ('--tag', $_) } @itags), '--build-arg', "BASE=$f:$v", '.');
+    my $err = my_system(
+      qw(docker build --target),
+      $target,       '--file',     "Dockerfile.$f", (map { ('--tag', $_) } @itags),
+      '--build-arg', "BASE=$f:$v", '.'
+    );
     die "FATAL: failed to build Docker image\n" if $err;
 
     push @tags, @itags;
