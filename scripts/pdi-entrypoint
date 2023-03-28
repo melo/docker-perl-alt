@@ -43,13 +43,7 @@ push @entrypoint, '/entrypoint' if -x '/entrypoint';
 ## Lambda support!
 my $lambda_handlers  = path('/app/lambda-handlers');
 my $lambda_runtime   = path($ENV{LAMBDA_RUNTIME_DIR} || '/var/runtime');
-my $lambda_task_root = path($ENV{LAMBDA_TASK_ROOT}   || '/var/task');
-
-$lambda_task_root->mkdir;
-my $it = $lambda_handlers->iterator;
-while (my $f = $it->()) {
-  $f->copy($lambda_task_root->child($f->basename));
-}
+my $lambda_task_root = path($ENV{LAMBDA_TASK_ROOT}   || '/var/task');  
 
 my $lambda_env_type  = running_in_lambda($lambda_handlers, @ARGV);
 if ($lambda_env_type) {
