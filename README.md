@@ -66,8 +66,7 @@ Most of the Lambda logic is provided by the excellent [AWS::Lambda][]
 Perl module. Kudos to Shogo Ichinose for this.
 
 Your handlers should be placed in the `lambda-handlers/` of your
-project, or if you prefer, `/var/task`. Make sure your `.pl` handlers
-are executable.
+project. Make sure your `.pl` handlers are executable.
 
 A sample handler (named `functions.pl`) looks like this:
 
