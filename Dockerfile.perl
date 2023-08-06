@@ -1,6 +1,6 @@
 ## The Runtime version
 
-ARG BASE=perl:5.36-slim
+ARG BASE=perl:5.38-slim
 
 FROM ${BASE} AS runtime
 
@@ -11,7 +11,7 @@ ENV AWS_LAMBDA_RIE_SHA256=129f33c8e0a475c88cf8a8a28e225e07a6b998438ac70f34260071
 ## The main event...
 RUN apt update                                                                       \
     && apt install -y --no-install-recommends                                        \
-          curl wget make zlib1g libssl1.1 libexpat1 gnupg libxml2 libxml2-utils jq   \
+          curl wget make zlib1g libssl libexpat1 gnupg libxml2 libxml2-utils jq   \
           build-essential                                                            \
     && apt upgrade -y                                                                \
     && cpm install -g Carton Path::Tiny autodie Module::CPANfile CPAN::Meta::Prereqs \

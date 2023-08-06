@@ -20,12 +20,12 @@ Each of these is available in combination with an Alpine and the official Perl b
 | Base Image  | Development | Build | Runtime |
 |-------------|-------------|-------|---------|
 | `alpine:3.9` | `alpine-legacy-devel` / `alpine-3.9-devel` | `alpine-legacy-build` / `alpine-3.9-build`| `alpine-legacy-runtime` / `alpine-3.9-runtime` |
-| `alpine:3.17` | `alpine-latest-devel` / `alpine-3.17-devel` | `alpine-latest-build` / `alpine-3.17-build`| `alpine-latest-runtime` / `alpine-3.17-runtime` |
+| `alpine:3.18` | `alpine-latest-devel` / `alpine-3.18-devel` | `alpine-latest-build` / `alpine-3.18-build`| `alpine-latest-runtime` / `alpine-3.18-runtime` |
 | `alpine:edge` | `alpine-next-devel` / `alpine-edge-devel` | `alpine-next-build` / `alpine-edge-build` | `alpine-next-runtime` / `alpine-edge-runtime` |
-| `perl:5.36-slim` | `perl-latest-devel` / `perl-5.36-slim-devel` | `perl-latest-build` / `perl-5.36-slim-build` | `perl-latest-runtime` / `perl-5.36-slim-runtime` |
-| `perl:5.36` | `perl-full-devel` / `perl-5.36-devel` | `perl-full-build` / `perl-5.36-build` | `perl-full-runtime` / `perl-5.36-runtime` |
+| `perl:5.38-slim` | `perl-latest-devel` / `perl-5.38-slim-devel` | `perl-latest-build` / `perl-5.38-slim-build` | `perl-latest-runtime` / `perl-5.38-slim-runtime` |
+| `perl:5.38` | `perl-full-devel` / `perl-5.38-devel` | `perl-full-build` / `perl-5.38-build` | `perl-full-runtime` / `perl-5.38-runtime` |
 
-See below how to create a Dockerfile for your own project that makes
+See below how to create a Dockerfile for your project that makes
 full use of this setup, while making sure that you'll end up with the
 smallest possible final image.
 
@@ -35,8 +35,11 @@ smallest possible final image.
 All images are based on Alpine and Perl images and include:
 
 * [perl](https://metacpan.org/release/perl):
-  * on Alpine images, we use the system Perl, on 3.17 it is 5.36.0;
-  * on Perl-images, currently 5.36.
+  * on Alpine images, we use the system `perl`:
+    * 3.9: perl 5.26.3 -- not recommended, we keep it for backward compatibility with some old builds, and will be removed soon;
+    * 3.18: perl 5.36.1;
+    * edge: perl 5.38.0.
+  * on Perl-images, currently 5.38.0.
 * [cpanm](https://metacpan.org/release/App-cpanminus);
 * [Carton](https://metacpan.org/release/Carton);
 * [App::cpm](https://metacpan.org/release/App-cpm).
