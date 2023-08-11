@@ -82,7 +82,7 @@ if ($cpuinfo) {
 
 
 ### Prepare our cmds, decide on final deployment or just recreate the snapshot
-my @cpm_cmd = ('cpm', 'install', '--workers', $workers, '-L', 'local/', '--no-prebuilt', '--no-test');
+my @cpm_cmd = ('cpm', 'install', '--workers', $workers, '-L', 'local/', '--no-prebuilt', '--no-test', '--show-build-log-on-failure');
 push @cpm_cmd, '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb' if -d '/mirror';
 push @cpm_cmd, '--verbose' if $opts{verbose};
 
@@ -113,24 +113,9 @@ chdir($deps_dir);
 print "\n\n*** First run - install stuff using '@cpm_cmd'\n\n";
 my $error = run_cmd(@cpm_cmd);
 
-
-### If we don't get a perfect build, we retry the same command
-### to make sure the build.log is the smallest possible to
-### show off the error, and then we dump it. If the second time
-### the install is perfect, oh well, we'll just move on...
-### Maybe we should die anyway but dump the previous log?
 if ($error) {
-  print "\n\n*** ERROR: command exit code $error, retrying to get a smaller log file\n\n";
-  $error = run_cmd(@cpm_cmd);
-
-  if ($error) {
-    print "\n\n*** Dumping build.log output:\n\n";
-    system('/bin/cat', "$ENV{HOME}/.perl-cpm/build.log");
-    print "\n\n*** End of build.log file\n\n";
-    exit(1);
-  }
-
-  print "\n\n*** Hmms... Second run of '@cpm_cmd' was ok, go figure... Continuing...\n\n";
+  print "\n\n*** ERROR End of build.log file\n\n";
+  exit(1);
 }
 
 
