@@ -51,11 +51,11 @@ ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 ## The Build version
 FROM runtime AS build
 
-RUN apt-get update                                                                  \
-    && apt-get install -y --no-install-recommends                                   \
-          build-essential zlib1g-dev libssl-dev libexpat1-dev libxml2-dev           \
-    && apt-get upgrade                                                              \
-    && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+RUN apt update                                                                  \
+    && apt install -y --no-install-recommends                                   \
+          build-essential zlib1g-dev libssl-dev libexpat1-dev libxml2-dev       \
+    && apt upgrade                                                              \
+    && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -fr /var/cache/apt/* /var/lib/apt/lists/*                                 
 
 
