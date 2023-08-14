@@ -13,7 +13,7 @@ ENV AWS_LAMBDA_RIE_SHA256=e0a2ec2d026b0c3e1f381eb445aa282bb1a0ddd1a4c82411aec971
 ## The main event...
 RUN apt update                                                                       \
     && apt install -y --no-install-recommends                                        \
-          curl wget make zlib1g libssl3 libexpat1 gnupg libxml2 libxml2-utils jq   \
+          curl wget make zlib1g libssl3 libexpat1 gnupg libxml2 libxml2-utils jq     \
           build-essential                                                            \
     && apt upgrade -y                                                                \
     && cpm install -g Carton Path::Tiny autodie Module::CPANfile CPAN::Meta::Prereqs \
