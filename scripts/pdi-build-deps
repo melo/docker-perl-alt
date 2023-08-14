@@ -69,7 +69,7 @@ if (my $layer = $opts{layer}) {
 }
 
 ### We need at least the cpanfile
-die "FATAL: no '$cpanfile' file found\n" unless -e $cpanfile;
+die "FATAL: no '$cpanfile' file found\n" if $cpanfile ne '.' and not -e $cpanfile;
 
 
 ### Try to use a dynamic number of workers based on the server available CPUs
@@ -82,7 +82,7 @@ if ($cpuinfo) {
 
 
 ### Prepare our cmds, decide on final deployment or just recreate the snapshot
-my @cpm_cmd = ('cpm', 'install', '--workers', $workers, '-L', 'local/', '--no-prebuilt', '--no-test', '--show-build-log-on-failure');
+my @cpm_cmd = ('cpm', 'install', '--workers', $workers, '--no-prebuilt', '--no-test', '--show-build-log-on-failure');
 push @cpm_cmd, '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb' if -d '/mirror';
 push @cpm_cmd, '--verbose' if $opts{verbose};
 
@@ -100,13 +100,16 @@ else {
 
 ### Destination dir for deps depends on app or stack mode
 my $deps_dir = $opts{stack} ? '/stack' : '/deps';
-
+push @cpm_cmd, '-L', "$deps_dir/local/";
 
 ### Prepare the cpanfiles required
-system('/bin/cp', $cpanfile, "$deps_dir/cpanfile");
-if   (-e $snapshot and !$opts{'skip-snapshot'}) { system('/bin/cp', $snapshot, "$deps_dir/cpanfile.snapshot") }
-else                                            { system('/bin/rm', '-f',      "$deps_dir/cpanfile.snapshot") }
-chdir($deps_dir);
+if ($cpanfile ne '.') {
+  system('/bin/cp', $cpanfile, "$deps_dir/cpanfile");
+  if   (-e $snapshot and !$opts{'skip-snapshot'}) { system('/bin/cp', $snapshot, "$deps_dir/cpanfile.snapshot") }
+  else                                            { system('/bin/rm', '-f',      "$deps_dir/cpanfile.snapshot") }
+  chdir($deps_dir);
+}
+else { push @cpm_cmd, '.' }
 
 
 ### Take care of running cpm to install eveything, first time with felling
