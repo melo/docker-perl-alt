@@ -68,6 +68,6 @@ if ($cfg{push}) {
 }
 
 sub my_system {
-  print ">>>>>>>> Cmd: @_\n";
+  print "\n\n>>>>>>>> Cmd: @_\n\n";
   return system(@_);
 }
