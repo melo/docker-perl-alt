@@ -6,16 +6,38 @@
 use strict;
 use Path::Tiny;
 
-my $bin = path('/app/bin');
-my $bin_it = $bin->iterator;
-while (my $f = $bin_it->()) {
-  if (-x "$f") {
-    system($^X, '-I/app/lib', '-wc', "$f") and die "**** Failed to check script '$f'\n";
+my $app = path('/app');
+chdir($app) or exit(0);
+
+for my $folder (qw( bin sbin )) {
+  my $bin = $app->child($folder);
+  next unless $bin->is_dir;
+
+  my $bin_it = $bin->iterator;
+  while (my $f = $bin_it->()) {
+    if (-x "$f") {
+      system($^X, '-I/app/lib', '-wc', "$f") and fatal("Failed to check script '$f'");
+    }
   }
 }
 
-if (-d '/app/t') {
-  chdir('/app');
-  system('prove', '-I/app/lib', 't/') and die "**** Failed tests, check them\n";
+my $t = $app->child('t');
+if ($t->is_dir) {
+  my @folders = ($t);
+  if (not $t->child('.pdi-run-tests-ok')->is_file) {
+    @folders = grep { $_->is_dir and $_->child('.pdi-run-tests-ok')->is_file } $t->children;
+  }
+  system('prove', '-vr', '-I/app/lib', @folders) and fatal('Failed tests, check them') if @folders;
 }
 
+exit(0);
+
+
+########################
+# Utilities
+
+sub fatal {
+  print "\n\n***** $@\n\n";
+  sleep(2);
+  exit(1);
+}
