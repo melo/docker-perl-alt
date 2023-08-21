@@ -1,8 +1,8 @@
-## The Runtime version
+## The Perl Official version
 
 ARG BASE=perl:5.38-slim
 
-FROM ${BASE} AS runtime
+FROM ${BASE} AS runtime-base
 
 ## Path and sig of AWS Lambda runtime emulator
 ## Release 1.14 Jul 28, 2023
@@ -33,40 +33,52 @@ RUN mkdir -p /usr/local/bin                                               \
     && shasum -c .sig                                                     \
     && rm .sig
 
-## All our scripts, layers, and default environment
-COPY scripts/ /usr/bin/
-RUN  chmod +x /usr/bin/pdi-*
 
-COPY bin/lambda-bootstrap /var/runtime/bootstrap
-RUN  chmod 555 /var/runtime/bootstrap
-
-COPY layers/ cpanfile* /deps/layers/
-
+## The setup...
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
 WORKDIR /app
-
 ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 
+
 ## The Build version
-FROM runtime AS build
+FROM runtime-base AS build-base
 
 RUN apt update                                                                  \
     && apt install -y --no-install-recommends                                   \
           build-essential zlib1g-dev libssl-dev libexpat1-dev libxml2-dev       \
-    && apt upgrade                                                              \
+    && apt upgrade -y                                                           \
     && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -fr /var/cache/apt/* /var/lib/apt/lists/*                                 
 
 
-## The Devel version
-FROM build AS devel
+## Our files
+FROM scratch AS project
+
+COPY bin/lambda-bootstrap /var/runtime/bootstrap
+COPY layers/ cpanfile* /deps/layers/
+COPY scripts/ /usr/bin/
+
+
+## Final Versions: Development
+FROM build-base AS devel
+COPY --from=project / /
 
 RUN pdi-build-deps --layer=devel  \
     && echo 'eval $( pdi-perl-env )' > /etc/profile.d/perl_env.sh
 
 
-## The Repl version
-FROM devel AS reply
+## Final Versions: Build
+FROM build-base AS build
+COPY --from=project / /
 
+
+## Final Versions: Runtime
+FROM runtime-base AS runtime
+COPY --from=project / /
+
+
+## Final Versions: Repl
+FROM devel AS reply
 RUN /usr/local/bin/cpm install --no-test Reply && rm -rf /root/.perl-cpm
+
+CMD ["reply"]
