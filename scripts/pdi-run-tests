@@ -9,7 +9,7 @@ use Path::Tiny;
 my $app = path('/app');
 chdir($app) or exit(0);
 
-for my $folder (qw( bin sbin )) {
+for my $folder (qw( bin sbin ), 'lambda-handlers') {
   my $bin = $app->child($folder);
   next unless $bin->is_dir;
 
