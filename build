@@ -68,6 +68,8 @@ if ($cfg{push}) {
   my_system('docker', 'push', $_) for @tags;
 }
 
+print "\n\n>>> DONE\n\n";
+
 sub my_system {
   print "\n\n>>>>>>>> Cmd: @_\n\n";
   return system(@_);
