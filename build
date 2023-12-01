@@ -52,6 +52,7 @@ for my $spec (@versions) {
     my $err = my_system(
       qw(docker build --target),
       $target,       '--file',     "Dockerfile.$f", (map { ('--tag', $_) } @itags),
+      '--label', 'maintainer=Pedro Melo <melo@simplicidade.org>',
       '--build-arg', "BASE=$f:$v", '.'
     );
     die "FATAL: failed to build Docker image\n" if $err;
