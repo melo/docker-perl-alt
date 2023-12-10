@@ -24,20 +24,27 @@ my @versions = (
   ['perl',   'full',   '5.38'],
 );
 
-my $docker_cmd = $cfg{multiplatform}? 'nerdctl' : 'docker';
+## Multiplatform support
+my @plats;
+my $docker_cmd = 'docker';
+if ($cfg{multiplatform}) {
+  $docker_cmd = 'nerdctl';
+  push @plats, '--platform', 'linux/arm64,linux/amd64';
+  print ">>>>>>>>>>> MULTIPLATFORM Build detected: @plats\n";
+  sleep(5);
+}
 
-my @tags;
 for my $spec (@versions) {
   my ($f, $t, $v, $x) = @$spec;
   my $baset = "$repo:$f-$t";
   my $basev = "$repo:$f-$v";
 
+  my @tags;
   for my $target (qw( devel build runtime reply )) {
     my $tagt = "$baset-$target";
     my $tagv = "$basev-$target";
     my $tagx = $x                         ? "$target" : "";
     my $tagl = $x && $target eq 'runtime' ? "latest"  : "";
-
 
     next if $cfg{filter} and $tagt !~ m/$cfg{filter}/;
 
@@ -50,28 +57,25 @@ for my $spec (@versions) {
     my @itags = ($tagt, $tagv);
     push @itags, $tagx if $tagx;
     push @itags, $tagl if $tagl;
+    push @itags, $baset if $target eq "devel";
 
-    my @plats;
-    push @plats, '--platform', 'linux/arm64,linux/amd64' if $cfg{multiplatform};
     my $err = my_system(
-      $docker_cmd,
-      qw(build --target),
-      $target,       '--file',     "Dockerfile.$f", (map { ('--tag', $_) } @itags),
-      '--label', 'maintainer=Pedro Melo <melo@simplicidade.org>', @plats,
-      '--build-arg', "BASE=$f:$v", '.'
+      $docker_cmd, qw(build --target),
+      $target,     '--file', "Dockerfile.$f", (map { ('--tag', $_) } @itags),
+      '--label',   'maintainer=Pedro Melo <melo@simplicidade.org>',
+      @plats,      '--build-arg', "BASE=$f:$v", '.'
     );
     die "FATAL: failed to build Docker image\n" if $err;
 
     push @tags, @itags;
+      
+    if ($cfg{push}) {
+      my_system($docker_cmd, 'push', @plats, $_) for @tags;
+      @tags = ();
+    }
   }
-
-  my_system($docker_cmd, 'tag', "$baset-devel", $baset);
-  push @tags, $baset;
 }
 
-if ($cfg{push}) {
-  my_system($docker_cmd, 'push', $_) for @tags;
-}
 
 print "\n\n>>> DONE\n\n";
 
