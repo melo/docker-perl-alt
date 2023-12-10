@@ -16,12 +16,12 @@ usage() if $cfg{help};
 my $repo = $cfg{repo};
 
 my @versions = (
+  ['perl',   'latest', '5.38-slim', 1],
+  ['perl',   'full',   '5.38'],
   ['alpine', 'latest', '3.18'],
   ['alpine', 'next',   'edge'],
   ['alpine', 'edge',   'edge'],
   ['alpine', 'legacy', '3.9'],
-  ['perl',   'latest', '5.38-slim', 1],
-  ['perl',   'full',   '5.38'],
 );
 
 ## Multiplatform support
