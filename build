@@ -10,7 +10,7 @@ sub usage {
 }
 
 my %cfg = (repo => 'melopt/perl-alt');
-GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s') or usage();
+GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s', 'multiplatform') or usage();
 usage() if $cfg{help};
 
 my $repo = $cfg{repo};
@@ -23,6 +23,8 @@ my @versions = (
   ['perl',   'latest', '5.38-slim', 1],
   ['perl',   'full',   '5.38'],
 );
+
+my $docker_cmd = $cfg{multiplatform}? 'nerdctl' : 'docker';
 
 my @tags;
 for my $spec (@versions) {
@@ -49,10 +51,13 @@ for my $spec (@versions) {
     push @itags, $tagx if $tagx;
     push @itags, $tagl if $tagl;
 
+    my @plats;
+    push @plats, '--platform', 'linux/arm64,linux/amd64' if $cfg{multiplatform};
     my $err = my_system(
-      qw(docker build --target),
+      $docker_cmd,
+      qw(build --target),
       $target,       '--file',     "Dockerfile.$f", (map { ('--tag', $_) } @itags),
-      '--label', 'maintainer=Pedro Melo <melo@simplicidade.org>',
+      '--label', 'maintainer=Pedro Melo <melo@simplicidade.org>', @plats,
       '--build-arg', "BASE=$f:$v", '.'
     );
     die "FATAL: failed to build Docker image\n" if $err;
@@ -60,12 +65,12 @@ for my $spec (@versions) {
     push @tags, @itags;
   }
 
-  my_system(qw(docker tag), "$baset-devel", $baset);
+  my_system($docker_cmd, 'tag', "$baset-devel", $baset);
   push @tags, $baset;
 }
 
 if ($cfg{push}) {
-  my_system('docker', 'push', $_) for @tags;
+  my_system($docker_cmd, 'push', $_) for @tags;
 }
 
 print "\n\n>>> DONE\n\n";
