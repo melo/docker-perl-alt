@@ -6,10 +6,10 @@ ARG BASE=alpine:3.18
 FROM ${BASE} AS runtime-base
 
 ## Path and sig of AWS Lambda runtime emulator
-## Release 1.15 Nov 20, 2023
+## Release 1.17 Mar 20, 2024
 ## see https://github.com/aws/aws-lambda-runtime-interface-emulator/releases
 ENV AWS_LAMBDA_RIE_RELEASE=https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
-ENV AWS_LAMBDA_RIE_SHA256=a2bca0ff67c5435a02bf28a85524a8ff2ec222f403c19d92fe304f3f7c7cce10
+ENV AWS_LAMBDA_RIE_SHA256=5d8a148954ceaf04e293ed35c921929488a5a96e9e23af6469dc7fffacfa3c4c
 
 ## The main event
 RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
