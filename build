@@ -2,15 +2,18 @@
 
 use strict;
 use warnings;
+use Scalar::Util ();
 use autodie;
 use Getopt::Long;
+use Path::Tiny;
+use Digest::SHA;
 
 sub usage {
-  die "Usage: $0 [--push] [--filter=s]\n";
+  die "Usage: $0 [--push] [--filter=s] [--check]\n";
 }
 
 my %cfg = (repo => 'melopt/perl-alt');
-GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s', 'multiplatform') or usage();
+GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s', 'multiplatform', 'check', 'debug') or usage();
 usage() if $cfg{help};
 
 my $repo = $cfg{repo};
@@ -23,6 +26,29 @@ my @versions = (
   ['alpine', 'edge',   'edge'],
   ['alpine', 'legacy', '3.9'],
 );
+
+## Lambda
+my %lambda_runtime_versions = (
+  aarch64 => [
+    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.18/aws-lambda-rie-arm64',
+    '82099b0621837205e3a9ebe8ef5ec6e8931e8f22a9c613d28f3f55b9f1fdff70',
+  ],
+  x86_64 => [
+    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.18/aws-lambda-rie-x86_64',
+    '699b9c0f2ba6a857744dbd056f31bf2655c80f9ad9386afa300e7c924ca4acdb',
+  ],
+);
+if ($cfg{check}) {
+  for my $arch (sort keys %lambda_runtime_versions) {
+    my $tmp = Path::Tiny->tempfile;
+    my ($url, $sig) = $lambda_runtime_versions{$arch}->@*;
+    system('/usr/bin/curl', '-sLo', $tmp, $url);
+    my $d = Digest::SHA->new(256);
+    $d->addfile($tmp->openr);
+    my $ok = $sig eq $d->hexdigest ? 'ok' : 'out-of-date';
+    print "$ok: $arch $url wanted $sig actual " . $d->hexdigest . "\n";
+  }
+}
 
 ## Multiplatform support
 my @plats;
@@ -55,20 +81,30 @@ for my $spec (@versions) {
     print "\n";
 
     my @itags = ($tagt, $tagv);
-    push @itags, $tagx if $tagx;
-    push @itags, $tagl if $tagl;
+    push @itags, $tagx  if $tagx;
+    push @itags, $tagl  if $tagl;
     push @itags, $baset if $target eq "devel";
 
-    my $err = my_system(
-      $docker_cmd, qw(build --target),
-      $target,     '--file', "Dockerfile.$f", (map { ('--tag', $_) } @itags),
-      '--label',   'maintainer=Pedro Melo <melo@simplicidade.org>',
-      @plats,      '--build-arg', "BASE=$f:$v", '.'
-    );
+    my @cmd = ($docker_cmd, 'build', '--no-cache');
+    push @cmd, '--progress', 'plain' if $cfg{debug};
+    push @cmd, @plats if @plats;
+    push @cmd, '--target' => $target;
+    push @cmd, '--file'   => "Dockerfile.$f";
+    push @cmd, map { ('--tag', $_) } @itags;
+    push @cmd, '--label' => 'maintainer=Pedro Melo <melo@simplicidade.org>';
+    push @cmd,
+      '--build-arg' => "BASE=$f:$v",
+      '--build-arg' => "AWS_LAMBDA_RIE_URL_aarch64=$lambda_runtime_versions{aarch64}[0]",
+      '--build-arg' => "AWS_LAMBDA_RIE_SIG_aarch64=$lambda_runtime_versions{aarch64}[1]",
+      '--build-arg' => "AWS_LAMBDA_RIE_URL_x86_64=$lambda_runtime_versions{x86_64}[0]",
+      '--build-arg' => "AWS_LAMBDA_RIE_SIG_x86_64=$lambda_runtime_versions{x86_64}[1]";
+    push @cmd, '.';
+
+    my $err = my_system(@cmd);
     die "FATAL: failed to build Docker image\n" if $err;
 
     push @tags, @itags;
-      
+
     if ($cfg{push}) {
       my_system($docker_cmd, 'push', @plats, $_) for @tags;
       @tags = ();

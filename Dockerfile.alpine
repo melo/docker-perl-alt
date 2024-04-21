@@ -3,35 +3,42 @@
 ## 3.18 is the latest "safest" version
 ARG BASE=alpine:3.18
 
+## The main event
 FROM ${BASE} AS runtime-base
 
-## Path and sig of AWS Lambda runtime emulator
-## Release 1.17 Mar 20, 2024
-## see https://github.com/aws/aws-lambda-runtime-interface-emulator/releases
-ENV AWS_LAMBDA_RIE_RELEASE=https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
-ENV AWS_LAMBDA_RIE_SHA256=5d8a148954ceaf04e293ed35c921929488a5a96e9e23af6469dc7fffacfa3c4c
-
-## The main event
 RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
-                       zlib expat gnupg libxml2 libxml2-utils jq tzdata   \
-                       build-base perl-dev                                \
+    zlib expat gnupg libxml2 libxml2-utils jq tzdata                      \
+    build-base perl-dev                                                   \
     && apk --no-cache upgrade                                             \
     && curl -L https://cpanmin.us | perl - App::cpanminus                 \
     && cpanm -n -q Carton App::cpm Path::Tiny                             \
-                   autodie Module::CPANfile CPAN::Meta::Prereqs           \
-                   AWS::Lambda AWS::XRay                                  \
+    autodie Module::CPANfile CPAN::Meta::Prereqs                          \
+    AWS::Lambda AWS::XRay                                                 \
     && rm -rf ~/.cpanm                                                    \
     && apk --no-cache del build-base perl-dev                             \
     && mkdir -p /app /deps /stack
 
-## AWS Lambda Emulator
-RUN mkdir -p /usr/local/bin                                               \
-    && cd /usr/local/bin                                                  \
-    && curl -Lo ./aws-lambda-rie ${AWS_LAMBDA_RIE_RELEASE}                \
-    && chmod +x ./aws-lambda-rie                                          \
-    && echo "$AWS_LAMBDA_RIE_SHA256  aws-lambda-rie" > ./.sig             \
-    && sha256sum -c .sig                                                  \
+
+## AWS Lambda Emulator support
+ARG AWS_LAMBDA_RIE_URL_aarch64="unknown"
+ARG AWS_LAMBDA_RIE_SIG_aarch64="unknown"
+ARG AWS_LAMBDA_RIE_URL_x86_64="unknown"
+ARG AWS_LAMBDA_RIE_SIG_x86_64="unknown"
+
+RUN mkdir -p /usr/local/bin                                        \
+    && cd /usr/local/bin                                           \
+    && arch=`uname -m`                                             \
+    && url="AWS_LAMBDA_RIE_URL_$arch"                              \
+    && sig="AWS_LAMBDA_RIE_SIG_$arch"                              \
+    && echo ">>>> arch $arch"                                      \
+    && sh -c "echo '>>>> url ' \${$url}"                           \
+    && sh -c "echo '>>>> sig ' \${$sig}"                           \
+    && sh -c "curl -Lo ./aws-lambda-rie \${$url}"                  \
+    && chmod +x ./aws-lambda-rie                                   \
+    && sh -c "echo 'SHA256 (aws-lambda-rie) =' \${$sig}" > ./.sig  \
+    && shasum -c .sig                                              \
     && rm .sig
+
 
 ## The setup...
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -43,7 +50,7 @@ ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
 FROM runtime-base AS build-base
 
 RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
-                       expat-dev libxml2-dev perl-utils         \
+    expat-dev libxml2-dev perl-utils         \
     && apk --no-cache upgrade
 
 
