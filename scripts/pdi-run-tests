@@ -15,9 +15,10 @@ for my $folder (qw( bin sbin ), 'lambda-handlers') {
 
   my $bin_it = $bin->iterator;
   while (my $f = $bin_it->()) {
-    if (-x "$f") {
-      system($^X, '-I/app/lib', '-wc', "$f") and fatal("Failed to check script '$f'");
-    }
+    next unless -x "$f";
+    next unless $f->slurp =~ m/^#!.+perl/;
+
+    system($^X, '-I/app/lib', '-wc', "$f") and fatal("Failed to check script '$f'");
   }
 }
 
