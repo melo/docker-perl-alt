@@ -104,7 +104,7 @@ for my $spec (@versions) {
     push @cmd, '.';
 
     my $err = my_system(@cmd);
-    die "FATAL: failed to build Docker image\n" if $err;
+    die "FATAL: failed to build Docker image for target $target, base $v: $tagt\n" if $err;
 
     push @tags, @itags;
 
