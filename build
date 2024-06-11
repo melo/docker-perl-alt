@@ -72,7 +72,10 @@ for my $spec (@versions) {
     my $tagx = $x                         ? "$target" : "";
     my $tagl = $x && $target eq 'runtime' ? "latest"  : "";
 
-    next if $cfg{filter} and $tagt !~ m/$cfg{filter}/;
+    if ($cfg{filter} and $tagt !~ m/$cfg{filter}/) {
+      print ">>>>>>>> Skipped via filter '$cfg{filter}'\n";
+      next;
+    }
 
     print ">>>> target $target, base $v: $tagt\n";
     print ">>>> target $target, base $v: $tagv\n";
