@@ -88,7 +88,7 @@ for my $spec (@versions) {
     push @itags, $tagl  if $tagl;
     push @itags, $baset if $target eq "devel";
 
-    my @cmd = ($docker_cmd, 'build', '--no-cache');
+    my @cmd = ($docker_cmd, 'build');
     push @cmd, '--progress', 'plain' if $cfg{debug};
     push @cmd, @plats if @plats;
     push @cmd, '--target' => $target;
