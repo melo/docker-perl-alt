@@ -11,7 +11,7 @@ RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
     build-base perl-dev                                                   \
     && apk --no-cache upgrade                                             \
     && curl -L https://cpanmin.us | perl - App::cpanminus                 \
-    && cpanm -n -q Carton App::cpm Path::Tiny                             \
+    && cpanm -n -q Carton App::cpm Path::Tiny Digest::SHA                 \
     autodie Module::CPANfile CPAN::Meta::Prereqs                          \
     AWS::Lambda AWS::XRay                                                 \
     && rm -rf ~/.cpanm                                                    \
@@ -35,8 +35,8 @@ RUN mkdir -p /usr/local/bin                                        \
     && sh -c "echo '>>>> sig ' \${$sig}"                           \
     && sh -c "curl -Lo ./aws-lambda-rie \${$url}"                  \
     && chmod +x ./aws-lambda-rie                                   \
-    && sh -c "echo 'SHA256 (aws-lambda-rie) =' \${$sig}" > ./.sig  \
-    && shasum -c .sig                                              \
+    && sh -c "echo \${$sig} ' aws-lambda-rie'" > ./.sig            \
+    && sha256sum -c .sig                                           \
     && rm .sig
 
 

@@ -10,7 +10,7 @@ RUN apt update                                                                  
     build-essential                                                                  \
     && apt upgrade -y                                                                \
     && cpm install -g Carton Path::Tiny autodie Module::CPANfile CPAN::Meta::Prereqs \
-    App::cpm Carton::Snapshot AWS::Lambda AWS::XRay                                  \
+    App::cpm Carton::Snapshot AWS::Lambda AWS::XRay Digest::SHA                      \
     && rm -rf ~/.cpanm                                                               \
     && mkdir -p /app /deps /stack                                                    \
     && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false      \
