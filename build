@@ -40,14 +40,19 @@ my %lambda_runtime_versions = (
 );
 if ($cfg{check}) {
   for my $arch (sort keys %lambda_runtime_versions) {
+    my ($url, $wanted) = $lambda_runtime_versions{$arch}->@*;
+
     my $tmp = Path::Tiny->tempfile;
-    my ($url, $sig) = $lambda_runtime_versions{$arch}->@*;
     system('/usr/bin/curl', '-sLo', $tmp, $url);
+
     my $d = Digest::SHA->new(256);
-    $d->addfile($tmp->openr);
-    my $ok = $sig eq $d->hexdigest ? 'ok' : 'out-of-date';
-    print "$ok: $arch $url wanted $sig actual " . $d->hexdigest . "\n";
+    $d->addfile($tmp->stringify);
+    my $got = $d->hexdigest;
+
+    my $status = $wanted eq $got ? 'ok' : 'out-of-date';
+    print "$status: $arch $url\n\twanted $wanted\n\tactual $got\n\tfile $tmp";
   }
+  exit(0);
 }
 
 ## Multiplatform support
