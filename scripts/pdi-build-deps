@@ -33,6 +33,7 @@ the --layer=X option.
 Options:
 
   --help, -?       This message
+  --root=path      Destination for our installs (default /deps)            
 
   --stack          Install dependencies for the stack
   --layer=X        Install dependencies for layer X
@@ -40,7 +41,6 @@ Options:
 
   --all            Installl dependencies for all phases. By default
                    we will skip suggests, configure, and develop
-
 EOU
 }
 
@@ -49,16 +49,17 @@ EOU
 # Main logic
 
 ### Parse our options and deal with bad ones or --help
-my $ok = GetOptions(\my %opts, 'stack', 'skip-snapshot', 'all', 'verbose', 'layer=s', 'help|?');
+my $ok = GetOptions(\my %opts, 'root=s', 'stack', 'skip-snapshot', 'all', 'verbose', 'layer=s', 'help|?');
 usage() unless $ok;
 usage() if $opts{help};
 
 my $cpanfile = $ARGV[0] || 'cpanfile';
 my $snapshot = "${cpanfile}.snapshot";
+my $root_dir = $opts{root} || '/deps';
 
 ### Layer support: use layer-specific cpanfile's
 if (my $layer = $opts{layer}) {
-  my $dir = "/deps/layers/$layer";
+  my $dir = "$root_dir/layers/$layer";
   die "FATAL: --layer requires $dir to exist with cpanfile for layer deps\n" unless -e "$dir/cpanfile";
 
   $cpanfile  = 'cpanfile';
@@ -99,7 +100,7 @@ else {
 
 
 ### Destination dir for deps depends on app or stack mode
-my $deps_dir = $opts{stack} ? '/stack' : '/deps';
+my $deps_dir = $opts{root} ? $root_dir : $opts{stack} ? '/stack' : $root_dir;
 push @cpm_cmd, '-L', "$deps_dir/local/";
 
 ### Prepare the cpanfiles required
