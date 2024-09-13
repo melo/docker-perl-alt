@@ -15,7 +15,7 @@ RUN apt update                                                                  
     && mkdir -p /app /deps /stack                                                    \
     && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false      \
     && apt autoremove -y build-essential                                             \
-    && rm -fr /var/cache/apt/* /var/lib/apt/lists/*
+    && rm -fr /var/cache/apt/* /var/lib/apt/lists/* /var/cache/debconf/*
 
 
 ## AWS Lambda Emulator support
@@ -53,7 +53,7 @@ RUN apt update                                                                  
     build-essential zlib1g-dev libssl-dev libexpat1-dev libxml2-dev       \
     && apt upgrade -y                                                           \
     && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
-    && rm -fr /var/cache/apt/* /var/lib/apt/lists/*                                 
+    && rm -fr /var/cache/apt/* /var/lib/apt/lists/* /var/cache/debconf/*
 
 
 ## Our files
