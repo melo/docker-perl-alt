@@ -1,0 +1,86 @@
+## The Chainguard base image version
+
+ARG BASE=cgr.dev/chainguard/wolfi-base
+
+## The main event
+FROM ${BASE} AS runtime-base
+
+RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
+    zlib expat gnupg libxml2 libxml2-utils jq tzdata                      \
+    build-base perl-dev                                                   \
+    && apk --no-cache upgrade                                             \
+    && curl -L https://cpanmin.us | perl - App::cpanminus                 \
+    && cpanm -n -q Carton App::cpm Path::Tiny Digest::SHA                 \
+    autodie Module::CPANfile CPAN::Meta::Prereqs                          \
+    AWS::Lambda AWS::XRay                                                 \
+    && rm -rf ~/.cpanm                                                    \
+    && apk --no-cache del build-base perl-dev                             \
+    && mkdir -p /app /deps /stack
+
+
+## AWS Lambda Emulator support
+ARG AWS_LAMBDA_RIE_URL_aarch64="unknown"
+ARG AWS_LAMBDA_RIE_SIG_aarch64="unknown"
+ARG AWS_LAMBDA_RIE_URL_x86_64="unknown"
+ARG AWS_LAMBDA_RIE_SIG_x86_64="unknown"
+
+RUN mkdir -p /usr/local/bin                                        \
+    && cd /usr/local/bin                                           \
+    && arch=`uname -m`                                             \
+    && url="AWS_LAMBDA_RIE_URL_$arch"                              \
+    && sig="AWS_LAMBDA_RIE_SIG_$arch"                              \
+    && echo ">>>> arch $arch"                                      \
+    && sh -c "echo '>>>> url ' \${$url}"                           \
+    && sh -c "echo '>>>> sig ' \${$sig}"                           \
+    && sh -c "curl -Lo ./aws-lambda-rie \${$url}"                  \
+    && chmod +x ./aws-lambda-rie                                   \
+    && sh -c "echo \${$sig} ' aws-lambda-rie'" > ./.sig            \
+    && sha256sum -c .sig                                           \
+    && rm .sig
+
+
+## The setup...
+ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+WORKDIR /app
+ENTRYPOINT [ "/usr/bin/pdi-entrypoint" ]
+
+
+## The Build version
+FROM runtime-base AS build-base
+
+RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
+    expat-dev libxml2-dev perl-utils         \
+    && apk --no-cache upgrade
+
+
+## Our files
+FROM scratch AS project
+
+COPY bin/lambda-bootstrap /var/runtime/bootstrap
+COPY layers/ cpanfile* /deps/layers/
+COPY scripts/ /usr/bin/
+
+
+## Final Versions: Development
+FROM build-base AS devel
+COPY --from=project / /
+
+RUN pdi-build-deps --layer=devel  \
+    && echo 'eval $( pdi-perl-env )' > /etc/profile.d/perl_env.sh
+
+
+## Final Versions: Build
+FROM build-base AS build
+COPY --from=project / /
+
+
+## Final Versions: Runtime
+FROM runtime-base AS runtime
+COPY --from=project / /
+
+
+## Final Versions: Repl
+FROM devel AS reply
+RUN /usr/local/bin/cpm install --no-test Reply && rm -rf /root/.perl-cpm
+
+CMD ["reply"]

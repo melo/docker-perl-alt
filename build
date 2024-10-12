@@ -30,12 +30,12 @@ my @versions = (
 ## Lambda
 my %lambda_runtime_versions = (
   aarch64 => [
-    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.20/aws-lambda-rie-arm64',
-    'ff894c384cc7f20c02fa25f360c604c5fcd0137cd7004a417db54a10f48eeaeb',
+    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.22/aws-lambda-rie-arm64',
+    '15ae5356c8e76cc483007c7cfe1aa821cae10afd259eab82ad8b7102ff486fdf',
   ],
   x86_64 => [
-    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.20/aws-lambda-rie-x86_64',
-    'dd2bc139b11abcb7cf550dcfd8ee671f385fb2b68a776fa7946fea0039651632',
+    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.22/aws-lambda-rie-x86_64',
+    '9badeae7e0ed0667afa60f79fd250002dfae38104f23ebc80508e247616ac97a',
   ],
 );
 if ($cfg{check}) {
