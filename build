@@ -19,11 +19,12 @@ usage() if $cfg{help};
 my $repo = $cfg{repo};
 
 my @versions = (
-  ['perl',   'latest', '5.40-slim', 1],
-  ['perl',   'full',   '5.40'],
-  ['alpine', 'latest', '3.20'],
-  ['alpine', 'next',   'edge'],
-  ['alpine', 'edge',   'edge'],
+  ['perl',       'latest', '5.40-slim', 1],
+  ['perl',       'full',   '5.40'],
+  ['alpine',     'latest', '3.20'],
+  ['alpine',     'next',   'edge'],
+  ['alpine',     'edge',   'edge'],
+  ['chainguard', 'latest', 'latest', undef, 'cgr.dev/chainguard/wolfi-base'],
 );
 
 ## Lambda
@@ -65,9 +66,12 @@ if ($cfg{multiplatform}) {
 }
 
 for my $spec (@versions) {
-  my ($f, $t, $v, $x) = @$spec;
+  my ($f, $t, $v, $x, $bi) = @$spec;
+  $bi = $f unless $bi;
+
   my $baset = "$repo:$f-$t";
   my $basev = "$repo:$f-$v";
+
 
   my @tags;
   for my $target (qw( devel build runtime reply )) {
@@ -100,7 +104,7 @@ for my $spec (@versions) {
     push @cmd, map { ('--tag', $_) } @itags;
     push @cmd, '--label' => 'maintainer=Pedro Melo <melo@simplicidade.org>';
     push @cmd,
-      '--build-arg' => "BASE=$f:$v",
+      '--build-arg' => "BASE=$bi:$v",
       '--build-arg' => "AWS_LAMBDA_RIE_URL_aarch64=$lambda_runtime_versions{aarch64}[0]",
       '--build-arg' => "AWS_LAMBDA_RIE_SIG_aarch64=$lambda_runtime_versions{aarch64}[1]",
       '--build-arg' => "AWS_LAMBDA_RIE_URL_x86_64=$lambda_runtime_versions{x86_64}[0]",
