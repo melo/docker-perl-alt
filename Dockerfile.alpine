@@ -1,7 +1,6 @@
 ## The Alpine base image version
 
-## 3.18 is the latest "safest" version
-ARG BASE=alpine:3.18
+ARG BASE=alpine:3.23
 
 ## The main event
 FROM ${BASE} AS runtime-base

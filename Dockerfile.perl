@@ -1,5 +1,5 @@
 ## The Perl Official version
-ARG BASE=perl:5.38-slim
+ARG BASE=perl:5.42-slim
 
 ## The main event...
 FROM ${BASE} AS runtime-base
