@@ -22,20 +22,40 @@ for my $folder (qw( bin sbin ), 'lambda-handlers') {
   }
 }
 
-my $t = $app->child('t');
-if ($t->is_dir) {
-  my @folders = ($t);
-  if (not $t->child('.pdi-run-tests-ok')->is_file) {
-    @folders = grep { $_->is_dir and $_->child('.pdi-run-tests-ok')->is_file } $t->children;
+my @test_folders;
+my @inc = ('-I/app/lib');
+
+# /app/t
+push @test_folders, collect_test_folders($app->child('t'));
+
+# /app/elib/*/t
+my $elib = $app->child('elib');
+if ($elib->is_dir) {
+  for my $mod (sort $elib->children) {
+    my $mod_lib = $mod->child('lib');
+    push @inc, "-I$mod_lib" if $mod_lib->is_dir;
+    push @test_folders, collect_test_folders($mod->child('t'));
   }
-  system('prove', '-vr', '-I/app/lib', @folders) and fatal('Failed tests, check them') if @folders;
 }
+
+system('prove', '-vr', @inc, @test_folders) and fatal('Failed tests, check them') if @test_folders;
 
 exit(0);
 
 
 ########################
 # Utilities
+
+sub collect_test_folders {
+  my ($t) = @_;
+  return unless $t->is_dir;
+
+  if ($t->child('.pdi-run-tests-ok')->is_file) {
+    return ($t);
+  }
+
+  return grep { $_->is_dir and $_->child('.pdi-run-tests-ok')->is_file } $t->children;
+}
 
 sub fatal {
   print "\n\n***** $@\n\n";

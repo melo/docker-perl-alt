@@ -133,6 +133,59 @@ Finally, if you need your own ENTRYPOINT script, place an executable
 at `/entrypoint` and it will be executed before the `COMMAND`.
 
 
+## Build-time Tests ##
+
+The `pdi-run-tests` script runs during `docker build` to syntax-check
+your Perl scripts and optionally run your test suite.
+
+### Script checks ###
+
+All executable Perl scripts under `/app/bin`, `/app/sbin`, and
+`/app/lambda-handlers` are syntax-checked with `perl -wc`.
+
+### Test discovery ###
+
+Tests are **opt-in**. The script looks for a `.pdi-run-tests-ok`
+marker file to decide which test folders to run:
+
+* If `/app/t/.pdi-run-tests-ok` exists, **all** tests under `/app/t`
+  are run;
+* If it doesn't exist, each immediate subdirectory of `/app/t` is
+  checked — only those containing `.pdi-run-tests-ok` are run;
+* If no marker file is found, no tests are run.
+
+The same logic applies to submodules under `/app/elib/`. For each
+`/app/elib/<module>/t` directory, the `.pdi-run-tests-ok` gating
+works identically. Additionally, any `/app/elib/<module>/lib`
+directories are added to the include path so that tests can find
+their modules.
+
+### Usage ###
+
+Add `pdi-run-tests` as a `RUN` step in your Dockerfile, after
+copying your application code:
+
+```Dockerfile
+COPY . /app/
+RUN pdi-run-tests
+```
+
+For example, to enable tests for your app and one elib submodule:
+
+```
+touch t/.pdi-run-tests-ok
+touch elib/my-module/t/.pdi-run-tests-ok
+```
+
+Or to enable only a specific test subdirectory:
+
+```
+mkdir -p t/unit
+touch t/unit/.pdi-run-tests-ok
+# t/integration/ tests won't run (no marker file)
+```
+
+
 ## Rational ##
 
 The system was designed to have a big, fully featured, build-time image,
