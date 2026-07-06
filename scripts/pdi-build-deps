@@ -106,7 +106,7 @@ if ($opts{all}) {
   push @cpm_cmd, '--with-develop', '--with-configure', '--with-suggests';
 }
 else {
-  push @cpm_cmd, '--without-develop', '--without-configure', '--without-suggests';
+  push @cpm_cmd, '--without-develop', '--without-suggests';
   push @carton_cmd, '--without', 'develop,configure,suggests';
 }
 
