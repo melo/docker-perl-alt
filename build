@@ -19,9 +19,9 @@ usage() if $cfg{help};
 my $repo = $cfg{repo};
 
 my @versions = (
-  ['perl',       'latest', '5.40-slim', 1],
-  ['perl',       'full',   '5.40'],
-  ['alpine',     'latest', '3.20'],
+  ['perl',       'latest', '5.42-slim', 1],
+  ['perl',       'full',   '5.42'],
+  ['alpine',     'latest', '3.24'],
   ['alpine',     'next',   'edge'],
   ['alpine',     'edge',   'edge'],
   ['chainguard', 'latest', 'latest', undef, 'cgr.dev/chainguard/wolfi-base'],
@@ -30,12 +30,12 @@ my @versions = (
 ## Lambda
 my %lambda_runtime_versions = (
   aarch64 => [
-    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.22/aws-lambda-rie-arm64',
-    '15ae5356c8e76cc483007c7cfe1aa821cae10afd259eab82ad8b7102ff486fdf',
+    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.35/aws-lambda-rie-arm64',
+    '8159172a2dc2ce5bf434ba94d7241f2252d1ac30b58410c7e30a4b8afefd7cca',
   ],
   x86_64 => [
-    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.22/aws-lambda-rie-x86_64',
-    '9badeae7e0ed0667afa60f79fd250002dfae38104f23ebc80508e247616ac97a',
+    'https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/v1.35/aws-lambda-rie-x86_64',
+    '3a3494331c212c14366c1073fdc4f0078f58a927da64479413879b0d84e21f20',
   ],
 );
 if ($cfg{check}) {
