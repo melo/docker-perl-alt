@@ -1,6 +1,6 @@
 ---
 name: version-bump
-description: Validate and update the base image versions, the cpm installer, and AWS Lambda RIE for the docker-perl-alt images. TRIGGER when the user asks to check/update/bump base image versions, perl/alpine/chainguard versions, the cpm installer, or the Lambda Runtime Interface Emulator, or types /version-bump. Covers where versions are defined, how to find the latest upstream releases, and the checksum verification required for cpm and the Lambda RIE.
+description: Validate and update the base image versions, the cpm installer, and AWS Lambda RIE for the docker-perl-alt images, and keep the README version references in sync. TRIGGER when the user asks to check/update/bump base image versions, perl/alpine/chainguard versions, the cpm installer, or the Lambda Runtime Interface Emulator, or types /version-bump. Covers where versions are defined, how to find the latest upstream releases, the checksum verification required for cpm and the Lambda RIE, and how to refresh the README.
 ---
 
 # Version bump
@@ -101,9 +101,51 @@ Every line must report `ok:` (wanted == actual). `out-of-date` means the pinned 
 doesn't match what you'll download — fix it before committing. `download-failed` means the
 fetch itself failed (e.g. GitHub rate-limit even after retries) — just re-run `--check`.
 
-### 6. Commit
+### 6. Update the README
 
-Commit only `build` (unless you also touched this skill). Suggested message form:
+[`README.md`](../../../README.md) hard-codes the base image versions in two places; both
+must be kept in sync with `@versions` after any base-image bump.
+
+1. **The image matrix table** (near the top, the `| Base Image | Development | ... |`
+   table). Update the `alpine:3.NN` and `perl:5.NN[-slim]` base-image labels **and** every
+   tag name that embeds the version, e.g. `alpine-3.NN-devel`, `perl-5.NN-slim-build`,
+   `perl-5.NN-runtime`. The `latest`/`next`/`edge`/`chainguard` rolling tags don't carry a
+   number and stay as-is.
+2. **The "What's inside?" perl bullet**, which lists the actual perl **point-release**
+   (e.g. `5.42.2`) shipped by each image family. These come from the distros, not from
+   `@versions`, so look each one up:
+
+   ```bash
+   # Alpine (per branch: vX.NN and edge) - system perl package version
+   for br in vX.NN edge; do
+     echo -n "$br: "
+     curl -s "https://pkgs.alpinelinux.org/packages?name=perl&branch=$br&repo=main&arch=x86_64" \
+       | grep -oE '>[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+<' | head -1
+   done
+
+   # Official perl:5.NN image - resolves to the newest 5.NN.x
+   curl -s "https://registry.hub.docker.com/v2/repositories/library/perl/tags?page_size=100" \
+     | grep -oE '"name":"5\.NN\.[0-9]+"' | head -1
+
+   # Chainguard wolfi-base - newest perl in the APKINDEX
+   curl -s "https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz" -o /tmp/wolfi.tar.gz \
+     && tar xzf /tmp/wolfi.tar.gz -C /tmp \
+     && awk '/^P:perl$/{getline; print}' /tmp/APKINDEX | sort -V | tail -1
+   ```
+
+   Update the `3.NN: perl X.Y.Z`, `edge: perl X.Y.Z`, official, and Chainguard lines to the
+   looked-up point-releases.
+
+After editing, sanity-check that no stale version strings remain:
+
+```bash
+grep -nE 'alpine:3\.[0-9]+|perl:5\.[0-9]+|perl 5\.[0-9]+\.[0-9]+' README.md
+```
+
+### 7. Commit
+
+Commit `build` and `README.md` together when both changed (plus this skill if you touched
+it). Suggested message form:
 
 ```
 base: bump base images and Lambda RIE to latest
@@ -111,4 +153,5 @@ base: bump base images and Lambda RIE to latest
 - perl: A.B -> C.D (current stable) ...
 - alpine latest: ...
 - AWS Lambda RIE: vX -> vY, updating URLs and both SHA256 checksums
+- README: refresh version table and perl point-releases
 ```
