@@ -27,6 +27,12 @@ my @versions = (
   ['chainguard', 'latest', 'latest', undef, 'cgr.dev/chainguard/wolfi-base'],
 );
 
+## cpm installer (fatpacked skaji/cpm) - single source of truth, passed to all Dockerfiles
+my %cpm = (
+  url  => 'https://raw.githubusercontent.com/skaji/cpm/main/cpm',
+  sha1 => 'c6a592f4a77e0dcdde64fb29b23a3c12ef5a27dc',
+);
+
 ## Lambda
 my %lambda_runtime_versions = (
   aarch64 => [
@@ -39,20 +45,34 @@ my %lambda_runtime_versions = (
   ],
 );
 if ($cfg{check}) {
+  ## cpm installer (SHA-1)
+  check_hash('cpm', $cpm{url}, 1, $cpm{sha1});
+
+  ## Lambda RIE (SHA-256)
   for my $arch (sort keys %lambda_runtime_versions) {
     my ($url, $wanted) = $lambda_runtime_versions{$arch}->@*;
-
-    my $tmp = Path::Tiny->tempfile;
-    system('/usr/bin/curl', '-sLo', $tmp, $url);
-
-    my $d = Digest::SHA->new(256);
-    $d->addfile($tmp->stringify);
-    my $got = $d->hexdigest;
-
-    my $status = $wanted eq $got ? 'ok' : 'out-of-date';
-    print "$status: $arch $url\n\twanted $wanted\n\tactual $got\n\tfile $tmp";
+    check_hash($arch, $url, 256, $wanted);
   }
   exit(0);
+}
+
+sub check_hash {
+  my ($label, $url, $algo, $wanted) = @_;
+
+  my $tmp = Path::Tiny->tempfile;
+  ## -f so an HTTP error (rate-limit, 404) fails instead of hashing an error page
+  my $err = system('/usr/bin/curl', '-fsSLo', $tmp, $url);
+  if ($err) {
+    print "download-failed: $label $url\n\t(curl exited $err - could not fetch)\n";
+    return;
+  }
+
+  my $d = Digest::SHA->new($algo);
+  $d->addfile($tmp->stringify);
+  my $got = $d->hexdigest;
+
+  my $status = $wanted eq $got ? 'ok' : 'out-of-date';
+  print "$status: $label $url\n\twanted $wanted\n\tactual $got\n\tfile $tmp\n";
 }
 
 ## Multiplatform support
@@ -105,6 +125,8 @@ for my $spec (@versions) {
     push @cmd, '--label' => 'maintainer=Pedro Melo <melo@simplicidade.org>';
     push @cmd,
       '--build-arg' => "BASE=$bi:$v",
+      '--build-arg' => "CPM_URL=$cpm{url}",
+      '--build-arg' => "CPM_SHA1=$cpm{sha1}",
       '--build-arg' => "AWS_LAMBDA_RIE_URL_aarch64=$lambda_runtime_versions{aarch64}[0]",
       '--build-arg' => "AWS_LAMBDA_RIE_SIG_aarch64=$lambda_runtime_versions{aarch64}[1]",
       '--build-arg' => "AWS_LAMBDA_RIE_URL_x86_64=$lambda_runtime_versions{x86_64}[0]",
