@@ -60,10 +60,8 @@ sub check_hash {
   my ($label, $url, $algo, $wanted) = @_;
 
   my $tmp = Path::Tiny->tempfile;
-  ## -f so an HTTP error (rate-limit, 404) fails instead of hashing an error page
-  my $err = system('/usr/bin/curl', '-fsSLo', $tmp, $url);
-  if ($err) {
-    print "download-failed: $label $url\n\t(curl exited $err - could not fetch)\n";
+  unless (fetch_url($url, $tmp)) {
+    print "download-failed: $label $url\n\t(could not fetch after retries)\n";
     return;
   }
 
@@ -73,6 +71,41 @@ sub check_hash {
 
   my $status = $wanted eq $got ? 'ok' : 'out-of-date';
   print "$status: $label $url\n\twanted $wanted\n\tactual $got\n\tfile $tmp\n";
+}
+
+## Download $url into $dest. Detects GitHub rate-limits (HTTP 429, and 403 for
+## secondary limits) and retries them - plus 5xx and transport errors - with
+## increasing back-off, up to 5 attempts. A 2xx download hashes the real payload
+## instead of a rate-limit error page. Non-retryable errors (e.g. 404) fail fast.
+sub fetch_url {
+  my ($url, $dest) = @_;
+
+  my $max = 5;
+  for my $attempt (1 .. $max) {
+    ## No -f: we want the HTTP status even on error, via -w, to tell rate-limits apart.
+    open(my $fh, '-|', '/usr/bin/curl', '-sSL', '-o', "$dest", '-w', '%{http_code}', $url)
+      or die "FATAL: cannot run curl: $!\n";
+    my $code = do { local $/; <$fh> };
+    close($fh);
+    my $curl_err = $? >> 8;
+    ($code) = (($code // '') =~ /(\d+)/);
+    $code //= 0;
+
+    return 1 if !$curl_err && $code >= 200 && $code < 300;
+
+    my $rate_limited = ($code == 429 || $code == 403);
+    my $retryable    = $rate_limited || $code >= 500 || $curl_err;
+    last if !$retryable || $attempt == $max;
+
+    my $sleep = 2**$attempt;    # 2, 4, 8, 16 seconds - increasing back-off
+    my $why =
+        $rate_limited ? "GitHub rate-limit (HTTP $code)"
+      : $code         ? "HTTP $code"
+      :                 "curl error $curl_err";
+    warn ">>>> $why fetching $url; retry $attempt/$max after ${sleep}s\n";
+    sleep($sleep);
+  }
+  return 0;
 }
 
 ## Multiplatform support
