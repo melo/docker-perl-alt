@@ -41,6 +41,11 @@ Options:
 
   --all            Installl dependencies for all phases. By default
                    we will skip suggests, configure, and develop
+
+  --configure-timeout=N  Seconds cpm waits for a dist's configure phase
+                         (env: PDI_CPM_CONFIGURE_TIMEOUT; cpm default 60)
+  --build-timeout=N      Seconds cpm waits for a dist's build phase
+                         (env: PDI_CPM_BUILD_TIMEOUT; cpm default 3600)
 EOU
 }
 
@@ -49,9 +54,14 @@ EOU
 # Main logic
 
 ### Parse our options and deal with bad ones or --help
-my $ok = GetOptions(\my %opts, 'root=s', 'stack', 'skip-snapshot', 'all', 'verbose', 'layer=s', 'help|?');
+my $ok = GetOptions(\my %opts, 'root=s', 'stack', 'skip-snapshot', 'all', 'verbose', 'layer=s',
+  'configure-timeout=i', 'build-timeout=i', 'help|?');
 usage() unless $ok;
 usage() if $opts{help};
+
+### Timeouts: CLI flag wins, else env var, else leave unset (keep cpm defaults)
+my $configure_timeout = $opts{'configure-timeout'} // $ENV{PDI_CPM_CONFIGURE_TIMEOUT};
+my $build_timeout     = $opts{'build-timeout'}     // $ENV{PDI_CPM_BUILD_TIMEOUT};
 
 my $cpanfile = $ARGV[0] || 'cpanfile';
 my $snapshot = "${cpanfile}.snapshot";
@@ -86,6 +96,8 @@ if ($cpuinfo) {
 my @cpm_cmd = ('cpm', 'install', '--workers', $workers, '--no-prebuilt', '--no-test', '--show-build-log-on-failure');
 push @cpm_cmd, '--mirror', '/mirror', '--resolver', '02packages,/mirror', '--resolver', 'metadb' if -d '/mirror';
 push @cpm_cmd, '--verbose' if $opts{verbose};
+push @cpm_cmd, '--configure-timeout', $configure_timeout if defined $configure_timeout;
+push @cpm_cmd, '--build-timeout',     $build_timeout     if defined $build_timeout;
 
 my @carton_cmd = ('carton', 'install');
 push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;

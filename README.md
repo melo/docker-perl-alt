@@ -133,6 +133,28 @@ Finally, if you need your own ENTRYPOINT script, place an executable
 at `/entrypoint` and it will be executed before the `COMMAND`.
 
 
+## cpm build timeouts ##
+
+On slow build hosts, some CPAN dists can take longer to configure or
+build than cpm's default per-phase timeouts (60s configure, 3600s
+build), causing `pdi-build-deps` to fail. You can raise these:
+
+* at build time, with the `--configure-timeout=N` / `--build-timeout=N`
+  options of `pdi-build-deps`:
+
+```dockerfile
+RUN cd /app && pdi-build-deps --build-timeout 900
+```
+
+* at runtime, when deps are (re)built at container start via
+  `PDI_UPDATE_DEPS`, with the `PDI_CPM_CONFIGURE_TIMEOUT` and
+  `PDI_CPM_BUILD_TIMEOUT` environment variables.
+
+`N` is a number of seconds. The command-line options take precedence
+over the environment variables; if neither is set, cpm's own defaults
+are used.
+
+
 ## Build-time Tests ##
 
 The `pdi-run-tests` script runs during `docker build` to syntax-check
