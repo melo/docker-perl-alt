@@ -2,18 +2,28 @@
 
 ARG BASE=cgr.dev/chainguard/wolfi-base
 
+## Fetch and verify the cpm installer before we trust it
+FROM ${BASE} AS cpm
+ARG CPM_SHA1=c6a592f4a77e0dcdde64fb29b23a3c12ef5a27dc
+
+RUN apk --no-cache add curl                                              \
+    && curl -fsSL https://raw.githubusercontent.com/skaji/cpm/main/cpm -o /cpm \
+    && echo "${CPM_SHA1}  /cpm" | sha1sum -c -                           \
+    && chmod 0755 /cpm
+
 ## The main event
 FROM ${BASE} AS runtime-base
+
+COPY --from=cpm /cpm /usr/local/bin/cpm
 
 RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
     zlib expat gnupg libxml2 libxml2-utils jq tzdata                      \
     build-base perl-dev                                                   \
     && apk --no-cache upgrade                                             \
-    && curl -L https://cpanmin.us | perl - App::cpanminus                 \
-    && cpanm -n -q Carton App::cpm Path::Tiny Digest::SHA                 \
+    && cpm install -g --no-test App::cpanminus Carton Path::Tiny Digest::SHA \
     autodie Module::CPANfile CPAN::Meta::Prereqs                          \
     AWS::Lambda AWS::XRay                                                 \
-    && rm -rf ~/.cpanm                                                    \
+    && rm -rf ~/.perl-cpm                                                 \
     && apk --no-cache del build-base perl-dev                             \
     && mkdir -p /app /deps /stack
 
