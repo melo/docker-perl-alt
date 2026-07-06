@@ -14,7 +14,8 @@ script at the repo root: [`build`](../../../build).
 
 There is nothing else to edit — the Dockerfiles take these as `--build-arg`s. All three
 Dockerfiles share one cpm setup: the verified fatpacked cpm bootstraps the install of the
-official `App::cpm`, which is then patched (see step 3) and becomes the real `cpm`.
+official `App::cpm`, which becomes the real `cpm`. Each image also ships an **optional**
+lenient App::cpm fork as a layer (see step 3).
 
 ## Procedure
 
@@ -45,17 +46,29 @@ echo "sha1: $(shasum /tmp/cpm | awk '{print $1}')"
 ```
 
 `App::cpm` itself is intentionally **unpinned** — the Dockerfiles install the latest from
-CPAN. The runtime-base `grep` guard (see step 3) fails the build loudly if a new App::cpm
-breaks the MYMETA patch, so after bumping cpm confirm a build still succeeds.
+CPAN. So is the lenient fork (step 3), which tracks a branch. After bumping cpm, confirm a
+build still succeeds.
 
-### 3. The App::cpm MYMETA patch
+### 3. The lenient App::cpm fork (NO_MYMETA support)
 
-All three images apply [`patches/App-cpm-Builder-Base-optional-MYMETA.patch`](../../../patches/App-cpm-Builder-Base-optional-MYMETA.patch)
-to the installed `App::cpm::Builder::Base` (makes the `MYMETA.json` copy optional). The
-runtime-base RUN locates the module via `@INC`, applies it with `patch -N`, and then
-`grep`s for the guard so a failed/fuzzed apply aborts the build. If a build fails at that
-`grep`, upstream changed `Builder/Base.pm` — refresh the patch's context lines against the
-current source and re-verify.
+`App::cpm` refuses distributions built with `NO_MYMETA` (by design — see
+[skaji/cpm#311](https://github.com/skaji/cpm/issues/311)). Instead of patching the stock
+install, each image ships a small fork,
+[`melo/cpm@no-mymeta-fallback`](https://github.com/melo/cpm/tree/no-mymeta-fallback), as an
+**optional layer** at `/deps/layers/app-cpm-lenient`. The `app-cpm-lenient` build stage
+downloads the branch tarball (`LENIENT_CPM_URL`) and copies its `lib/` into the layer's
+`lib/perl5/` plus a `bin/cpm` wrapper; nothing loads it unless `pdi-build-deps --lenient`
+(or `PDI_BUILD_DEPS_LENIENT=1`) puts it on `PATH`/`PERL5LIB`.
+
+The fork carries a **single logic change** on top of upstream `App::cpm` (a `MYMETA`
+fallback in `App::cpm::Builder::Base`) and **no new dependencies**, so its `lib/` cleanly
+shadows the stock install while every dependency still resolves from the global one.
+
+> ⚠️ **If a new upstream `cpm`/`App::cpm` release is available, STOP.** The fork branch
+> must be rebased onto the new upstream before the images ship it, or the lenient layer
+> will lag behind (and may reintroduce bugs the update fixed). Do **not** just bump the
+> base images: strongly recommend rebasing `melo/cpm@no-mymeta-fallback` over the new
+> upstream tag first, regenerate the branch, then rebuild and re-verify.
 
 ### 4. Update the Lambda RIE (REQUIRED: checksums)
 

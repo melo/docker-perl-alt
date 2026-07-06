@@ -42,6 +42,12 @@ Options:
   --all            Installl dependencies for all phases. By default
                    we will skip suggests, configure, and develop
 
+  --lenient        Install using the melo/cpm no-mymeta-fallback fork of
+                   App::cpm, which tolerates distributions built with
+                   NO_MYMETA (env: PDI_BUILD_DEPS_LENIENT). This fork is
+                   NOT supported by the cpm author - see
+                   https://github.com/skaji/cpm/issues/311
+
   --configure-timeout=N  Seconds cpm waits for a dist's configure phase
                          (env: PDI_CPM_CONFIGURE_TIMEOUT; cpm default 60)
   --build-timeout=N      Seconds cpm waits for a dist's build phase
@@ -55,13 +61,30 @@ EOU
 
 ### Parse our options and deal with bad ones or --help
 my $ok = GetOptions(\my %opts, 'root=s', 'stack', 'skip-snapshot', 'all', 'verbose', 'layer=s',
-  'configure-timeout=i', 'build-timeout=i', 'help|?');
+  'lenient', 'configure-timeout=i', 'build-timeout=i', 'help|?');
 usage() unless $ok;
 usage() if $opts{help};
 
 ### Timeouts: CLI flag wins, else env var, else leave unset (keep cpm defaults)
 my $configure_timeout = $opts{'configure-timeout'} // $ENV{PDI_CPM_CONFIGURE_TIMEOUT};
 my $build_timeout     = $opts{'build-timeout'}     // $ENV{PDI_CPM_BUILD_TIMEOUT};
+
+### Lenient mode: shadow the stock App::cpm with the melo/cpm no-mymeta-fallback fork
+### shipped as the optional /deps/layers/app-cpm-lenient layer, so cpm accepts dists
+### that disable MYMETA. Nothing else loads this layer - we only put it on PATH/PERL5LIB
+### here, right before we shell out to cpm below.
+if ($opts{lenient} // $ENV{PDI_BUILD_DEPS_LENIENT}) {
+  my $ldir = '/deps/layers/app-cpm-lenient';
+  die "FATAL: --lenient requested but the lenient App::cpm layer is missing at $ldir\n"
+    . "       (it is only shipped in the melopt/perl-alt images)\n"
+    unless -x "$ldir/bin/cpm";
+
+  $ENV{PATH}     = "$ldir/bin:$ENV{PATH}";
+  $ENV{PERL5LIB} = join(':', grep { defined && length } "$ldir/lib/perl5", $ENV{PERL5LIB});
+
+  print "\n*** LENIENT mode: using the melo/cpm no-mymeta-fallback App::cpm from $ldir\n";
+  print "*** NOTE: this fork is NOT supported by the cpm author - https://github.com/skaji/cpm/issues/311\n\n";
+}
 
 my $cpanfile = $ARGV[0] || 'cpanfile';
 my $snapshot = "${cpanfile}.snapshot";

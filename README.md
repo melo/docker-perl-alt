@@ -155,6 +155,37 @@ over the environment variables; if neither is set, cpm's own defaults
 are used.
 
 
+## Lenient installs for NO_MYMETA distributions ##
+
+`App::cpm` (the [`skaji/cpm`](https://github.com/skaji/cpm) tool we use to
+install dependencies) **refuses to install distributions that disable
+`MYMETA` generation** (`NO_MYMETA`). This is intentional on the author's
+part and will not change - see
+[skaji/cpm#311](https://github.com/skaji/cpm/issues/311).
+
+If you depend on such a distribution, run `pdi-build-deps` in *lenient*
+mode. This installs your dependencies with a small fork of `App::cpm`,
+[`melo/cpm@no-mymeta-fallback`](https://github.com/melo/cpm/tree/no-mymeta-fallback),
+that falls back to the static `META.json`/`META.yml` when no `MYMETA` is
+produced, instead of aborting:
+
+```dockerfile
+RUN cd /app && pdi-build-deps --lenient
+```
+
+You can also enable it at runtime (when deps are rebuilt at container
+start via `PDI_UPDATE_DEPS`) by setting `PDI_BUILD_DEPS_LENIENT=1`.
+
+The fork ships as an *optional* layer at `/deps/layers/app-cpm-lenient`
+that nothing loads by default; lenient mode simply prepends its `bin/` to
+`PATH` and its `lib/perl5/` to `PERL5LIB` for the duration of the install,
+so the stock `cpm` (which keeps tracking upstream `App::cpm`) is untouched
+everywhere else.
+
+> **Note:** this fork is **not** supported by the `cpm` author. Use it only
+> for the distributions that actually need it.
+
+
 ## Build-time Tests ##
 
 The `pdi-run-tests` script runs during `docker build` to syntax-check

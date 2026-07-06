@@ -15,27 +15,22 @@ RUN apk --no-cache add curl                                              \
 ## The main event
 FROM ${BASE} AS runtime-base
 
-## The verified fatpacked cpm (bootstrap only) and the local App::cpm patch
+## The verified fatpacked cpm, used only to bootstrap the official App::cpm
 COPY --from=cpm /cpm /usr/local/bin/cpm-bootstrap
-COPY patches/App-cpm-Builder-Base-optional-MYMETA.patch /tmp/
 
-## Bootstrap installs the official App::cpm (whose own /usr/local/bin/cpm becomes THE cpm),
-## then we patch it and drop the fatpacked bootstrap.
+## Bootstrap installs the official App::cpm (whose own /usr/local/bin/cpm becomes THE
+## cpm), then we drop the fatpacked bootstrap.
 RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
     zlib expat gnupg libxml2 libxml2-utils jq tzdata                      \
-    build-base perl-dev patch                                             \
+    build-base perl-dev                                                   \
     && apk --no-cache upgrade                                             \
     && cpm-bootstrap install -g --no-test                                 \
     App::cpanminus Carton Carton::Snapshot App::cpm Path::Tiny Digest::SHA \
     autodie Module::CPANfile CPAN::Meta::Prereqs                          \
     AWS::Lambda AWS::XRay                                                 \
     && rm -rf ~/.perl-cpm                                                 \
-    && base_pm="$(perl -e 'for my $d (@INC){ my $f = "$d/App/cpm/Builder/Base.pm"; if (-f $f) { print $f; last } }')" \
-    && test -n "$base_pm"                                                 \
-    && patch -N "$base_pm" < /tmp/App-cpm-Builder-Base-optional-MYMETA.patch \
-    && grep -q 'if -f "MYMETA.json"' "$base_pm"                           \
-    && rm -f /usr/local/bin/cpm-bootstrap /tmp/App-cpm-Builder-Base-optional-MYMETA.patch \
-    && apk --no-cache del build-base perl-dev patch                       \
+    && rm -f /usr/local/bin/cpm-bootstrap                                 \
+    && apk --no-cache del build-base perl-dev                             \
     && mkdir -p /app /deps /stack
 
 
@@ -74,11 +69,33 @@ RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
     && apk --no-cache upgrade
 
 
+## Optional lenient App::cpm layer
+##
+## App::cpm (skaji/cpm) refuses distributions that disable MYMETA (NO_MYMETA), by design
+## - https://github.com/skaji/cpm/issues/311. To still install such dists we ship the
+## melo/cpm@no-mymeta-fallback fork in an *optional* layer: its lib/ shadows the stock
+## App::cpm only when `pdi-build-deps --lenient` (or PDI_BUILD_DEPS_LENIENT=1) puts bin/ on
+## PATH and lib/perl5/ on PERL5LIB. The .optional marker keeps anything that auto-activates
+## layers from ever loading it by default.
+FROM runtime-base AS app-cpm-lenient
+ARG LENIENT_CPM_URL=https://github.com/melo/cpm/archive/refs/heads/no-mymeta-fallback.tar.gz
+RUN apk --no-cache add tar                                                              \
+    && mkdir -p /deps/layers/app-cpm-lenient/bin /deps/layers/app-cpm-lenient/lib/perl5 \
+    && curl -fsSL "${LENIENT_CPM_URL}" | tar -xz -C /tmp                                \
+    && cp -R /tmp/cpm-*/lib/. /deps/layers/app-cpm-lenient/lib/perl5/                   \
+    && sed '1s|^#!.*|#!/usr/bin/env perl|' /tmp/cpm-*/script/cpm                        \
+       > /deps/layers/app-cpm-lenient/bin/cpm                                           \
+    && chmod 0755 /deps/layers/app-cpm-lenient/bin/cpm                                  \
+    && touch /deps/layers/app-cpm-lenient/.optional                                     \
+    && rm -rf /tmp/cpm-*
+
+
 ## Our files
 FROM scratch AS project
 
 COPY bin/lambda-bootstrap /var/runtime/bootstrap
 COPY layers/ cpanfile* /deps/layers/
+COPY --from=app-cpm-lenient /deps/layers/app-cpm-lenient /deps/layers/app-cpm-lenient
 COPY scripts/ /usr/bin/
 
 
