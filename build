@@ -7,6 +7,7 @@ use autodie;
 use Getopt::Long;
 use Path::Tiny;
 use Digest::SHA;
+use POSIX ();
 
 sub usage {
   die "Usage: $0 [--push] [--filter=s] [--check]\n";
@@ -17,6 +18,36 @@ GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s', 'multiplatform', 'chec
 usage() if $cfg{help};
 
 my $repo = $cfg{repo};
+
+## Image provenance: derive the git origin URL and commit so every build is
+## labelled (OCI image-spec annotations). Applied via --label below, so they
+## land on all targets/bases without touching any Dockerfile.
+my %git = git_provenance();
+$git{created} = POSIX::strftime('%Y-%m-%dT%H:%M:%SZ', gmtime);    # RFC 3339 UTC
+print ">>>> provenance: source=$git{source} revision=$git{revision} created=$git{created}\n\n";
+
+sub git_provenance {
+  chomp(my $sha    = qx{git rev-parse HEAD 2>/dev/null});
+  chomp(my $dirty  = qx{git status --porcelain 2>/dev/null});
+  chomp(my $remote = qx{git config --get remote.origin.url 2>/dev/null});
+
+  $sha = 'unknown' unless length $sha;
+  $sha .= '-dirty' if length $dirty;
+
+  ## normalize the origin to an https browse URL:
+  ##   git@github.com:melo/foo.git      -> https://github.com/melo/foo
+  ##   ssh://git@github.com/melo/foo.git -> https://github.com/melo/foo
+  if (length $remote) {
+    $remote =~ s{^git\@([^:]+):}{https://$1/};
+    $remote =~ s{^ssh://git\@([^/]+)/}{https://$1/};
+    $remote =~ s{\.git$}{};
+  }
+  else {
+    $remote = 'unknown';
+  }
+
+  return (source => $remote, revision => $sha);
+}
 
 my @versions = (
   ['perl',       'latest', '5.42-slim', 1],
@@ -155,7 +186,12 @@ for my $spec (@versions) {
     push @cmd, '--target' => $target;
     push @cmd, '--file'   => "Dockerfile.$f";
     push @cmd, map { ('--tag', $_) } @itags;
-    push @cmd, '--label' => 'maintainer=Pedro Melo <melo@simplicidade.org>';
+    push @cmd,
+      '--label' => 'maintainer=Pedro Melo <melo@simplicidade.org>',
+      '--label' => "org.opencontainers.image.source=$git{source}",
+      '--label' => "org.opencontainers.image.url=$git{source}",
+      '--label' => "org.opencontainers.image.revision=$git{revision}",
+      '--label' => "org.opencontainers.image.created=$git{created}";
     push @cmd,
       '--build-arg' => "BASE=$bi:$v",
       '--build-arg' => "CPM_URL=$cpm{url}",
