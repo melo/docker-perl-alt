@@ -2,29 +2,40 @@
 
 ARG BASE=alpine:3.23
 
-## Fetch and verify the cpm installer before we trust it
+## Fetch and verify the cpm installer before we trust it (pin comes from ./build)
 FROM ${BASE} AS cpm
+ARG CPM_URL=https://raw.githubusercontent.com/skaji/cpm/main/cpm
 ARG CPM_SHA1=c6a592f4a77e0dcdde64fb29b23a3c12ef5a27dc
 
 RUN apk --no-cache add curl                                              \
-    && curl -fsSL https://raw.githubusercontent.com/skaji/cpm/main/cpm -o /cpm \
+    && curl -fsSL "${CPM_URL}" -o /cpm                                    \
     && echo "${CPM_SHA1}  /cpm" | sha1sum -c -                           \
     && chmod 0755 /cpm
 
 ## The main event
 FROM ${BASE} AS runtime-base
 
-COPY --from=cpm /cpm /usr/local/bin/cpm
+## The verified fatpacked cpm (bootstrap only) and the local App::cpm patch
+COPY --from=cpm /cpm /usr/local/bin/cpm-bootstrap
+COPY patches/App-cpm-Builder-Base-optional-MYMETA.patch /tmp/
 
+## Bootstrap installs the official App::cpm (whose own /usr/local/bin/cpm becomes THE cpm),
+## then we patch it and drop the fatpacked bootstrap.
 RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
     zlib expat gnupg libxml2 libxml2-utils jq tzdata                      \
-    build-base perl-dev                                                   \
+    build-base perl-dev patch                                             \
     && apk --no-cache upgrade                                             \
-    && cpm install -g --no-test App::cpanminus Carton Path::Tiny Digest::SHA \
+    && cpm-bootstrap install -g --no-test                                 \
+    App::cpanminus Carton Carton::Snapshot App::cpm Path::Tiny Digest::SHA \
     autodie Module::CPANfile CPAN::Meta::Prereqs                          \
     AWS::Lambda AWS::XRay                                                 \
     && rm -rf ~/.perl-cpm                                                 \
-    && apk --no-cache del build-base perl-dev                             \
+    && base_pm="$(perl -e 'for my $d (@INC){ my $f = "$d/App/cpm/Builder/Base.pm"; if (-f $f) { print $f; last } }')" \
+    && test -n "$base_pm"                                                 \
+    && patch -N "$base_pm" < /tmp/App-cpm-Builder-Base-optional-MYMETA.patch \
+    && grep -q 'if -f "MYMETA.json"' "$base_pm"                           \
+    && rm -f /usr/local/bin/cpm-bootstrap /tmp/App-cpm-Builder-Base-optional-MYMETA.patch \
+    && apk --no-cache del build-base perl-dev patch                       \
     && mkdir -p /app /deps /stack
 
 

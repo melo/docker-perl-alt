@@ -1,18 +1,42 @@
 ## The Perl Official version
 ARG BASE=perl:5.42-slim
 
+## Fetch and verify the cpm installer before we trust it (pin comes from ./build)
+FROM ${BASE} AS cpm
+ARG CPM_URL=https://raw.githubusercontent.com/skaji/cpm/main/cpm
+ARG CPM_SHA1=c6a592f4a77e0dcdde64fb29b23a3c12ef5a27dc
+
+RUN apt-get update                                                       \
+    && apt-get install -y --no-install-recommends curl ca-certificates   \
+    && curl -fsSL "${CPM_URL}" -o /cpm                                    \
+    && echo "${CPM_SHA1}  /cpm" | sha1sum -c -                           \
+    && chmod 0755 /cpm
+
 ## The main event...
 FROM ${BASE} AS runtime-base
 
+## The verified fatpacked cpm (bootstrap only) and the local App::cpm patch
+COPY --from=cpm /cpm /usr/local/bin/cpm-bootstrap
+COPY patches/App-cpm-Builder-Base-optional-MYMETA.patch /tmp/
+
+## Bootstrap installs the official App::cpm (whose own /usr/local/bin/cpm becomes THE cpm),
+## then we patch it and drop the fatpacked bootstrap.
 RUN apt update                                                                       \
     && apt install -y --no-install-recommends                                        \
     curl wget make zlib1g libssl3 libexpat1 gnupg libxml2 libxml2-utils jq           \
-    build-essential                                                                  \
+    build-essential patch                                                            \
     && apt upgrade -y                                                                \
-    && cpm install -g Carton Path::Tiny autodie Module::CPANfile CPAN::Meta::Prereqs \
-    App::cpm Carton::Snapshot AWS::Lambda AWS::XRay Digest::SHA                      \
-    && rm -rf ~/.cpanm                                                               \
+    && cpm-bootstrap install -g --no-test                                            \
+    App::cpanminus Carton Carton::Snapshot App::cpm Path::Tiny Digest::SHA           \
+    autodie Module::CPANfile CPAN::Meta::Prereqs AWS::Lambda AWS::XRay               \
+    && rm -rf ~/.perl-cpm ~/.cpanm                                                   \
+    && base_pm="$(perl -e 'for my $d (@INC){ my $f = "$d/App/cpm/Builder/Base.pm"; if (-f $f) { print $f; last } }')" \
+    && test -n "$base_pm"                                                            \
+    && patch -N "$base_pm" < /tmp/App-cpm-Builder-Base-optional-MYMETA.patch         \
+    && grep -q 'if -f "MYMETA.json"' "$base_pm"                                      \
+    && rm -f /usr/local/bin/cpm-bootstrap /tmp/App-cpm-Builder-Base-optional-MYMETA.patch \
     && mkdir -p /app /deps /stack                                                    \
+    && apt purge -y patch                                                            \
     && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false      \
     && apt autoremove -y build-essential                                             \
     && rm -fr /var/cache/apt/* /var/lib/apt/lists/* /var/cache/debconf/*
