@@ -158,9 +158,9 @@ are used.
 ## Lenient installs for NO_MYMETA distributions ##
 
 `App::cpm` (the [`skaji/cpm`](https://github.com/skaji/cpm) tool we use to
-install dependencies) **refuses to install distributions that disable
-`MYMETA` generation** (`NO_MYMETA`). This is intentional on the author's
-part and will not change - see
+install dependencies) prefers not to install distributions that disable
+`MYMETA` generation (`NO_MYMETA`). This is intentional on the author's
+part - see
 [skaji/cpm#311](https://github.com/skaji/cpm/issues/311).
 
 If you depend on such a distribution, run `pdi-build-deps` in *lenient*
