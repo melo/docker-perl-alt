@@ -79,8 +79,9 @@ RUN apk --no-cache add build-base zlib-dev perl-dev openssl-dev \
 ## layers from ever loading it by default.
 FROM runtime-base AS app-cpm-lenient
 ARG LENIENT_CPM_URL=https://github.com/melo/cpm/archive/refs/heads/no-mymeta-fallback.tar.gz
-RUN apk --no-cache add tar                                                              \
-    && mkdir -p /deps/layers/app-cpm-lenient/bin /deps/layers/app-cpm-lenient/lib/perl5 \
+## wolfi has no standalone 'tar' package (unlike Alpine); the busybox tar that
+## wolfi-base ships at /usr/bin/tar handles the gzip extraction below just fine.
+RUN mkdir -p /deps/layers/app-cpm-lenient/bin /deps/layers/app-cpm-lenient/lib/perl5 \
     && curl -fsSL "${LENIENT_CPM_URL}" | tar -xz -C /tmp                                \
     && cp -R /tmp/cpm-*/lib/. /deps/layers/app-cpm-lenient/lib/perl5/                   \
     && sed '1s|^#!.*|#!/usr/bin/env perl|' /tmp/cpm-*/script/cpm                        \
