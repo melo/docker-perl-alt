@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use File::Copy qw(copy);
+use File::Path qw(make_path remove_tree);
 
 ################################################
 # Usage
@@ -99,16 +101,27 @@ if (my $layer = $opts{layer}) {
   $snapshot  = 'cpanfile.snapshot';
   $opts{all} = 1;
   delete $opts{stack};
-  chdir($dir);
+  chdir($dir) or die "FATAL: could not chdir to layer dir '$dir': $!\n";
 }
 
 ### We need at least the cpanfile
 die "FATAL: no '$cpanfile' file found\n" if $cpanfile ne '.' and not -e $cpanfile;
 
 
+### Destination dir for deps depends on app or stack mode
+my $deps_dir = $opts{root} ? $root_dir : $opts{stack} ? '/stack' : $root_dir;
+
+### Running as a non-root user is a first-class case: the images create /deps,
+### /stack and HOME as root, so a non-root run cannot write there. Fail early and
+### clearly (instead of a silent cp failure + confusing cpm error later), and make
+### sure cpm/cpanm have a writable HOME for their caches.
+ensure_writable_dir($deps_dir, 'the installed dependencies');
+ensure_writable_home();
+
+
 ### Try to use a dynamic number of workers based on the server available CPUs
 my $workers = 4;                                                            ## the CPM default
-my $cpuinfo = do { local $/; open(my $fh, '<', '/proc/cpuinfo'); <$fh> };
+my $cpuinfo = do { local $/; my $r; if (open my $fh, '<', '/proc/cpuinfo') { $r = <$fh> } $r };
 if ($cpuinfo) {
   my @cores = $cpuinfo =~ m/^(processor)\s*:\s*\d+$/gsm;
   $workers = @cores * 2;
@@ -126,24 +139,38 @@ my @carton_cmd = ('carton', 'install');
 push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;
 
 if ($opts{all}) {
-  push @cpm_cmd, '--with-develop', '--with-configure', '--with-suggests';
+  ## Every phase and relationship. The old --with-develop/--with-configure/--with-suggests
+  ## flags are deprecated in current cpm; --top-level-* is the replacement.
+  push @cpm_cmd, '--top-level-phase', 'configure,build,test,runtime,develop';
+  push @cpm_cmd, '--top-level-relationship', 'requires,recommends,suggests';
 }
 else {
-  push @cpm_cmd, '--without-develop', '--without-suggests';
+  ## Skip suggests, configure, and develop (see --all in the usage above). The old
+  ## --without-develop/--without-suggests flags are deprecated and, since current cpm
+  ## defaults the configure phase on, no longer skipped configure - spell it out here.
+  push @cpm_cmd, '--top-level-phase', 'build,test,runtime';
+  push @cpm_cmd, '--top-level-relationship', 'requires';
   push @carton_cmd, '--without', 'develop,configure,suggests';
 }
 
 
-### Destination dir for deps depends on app or stack mode
-my $deps_dir = $opts{root} ? $root_dir : $opts{stack} ? '/stack' : $root_dir;
 push @cpm_cmd, '-L', "$deps_dir/local/";
 
-### Prepare the cpanfiles required
+### Prepare the cpanfiles required (all writes checked - the destination may be
+### read-only when we are not root, and a silent failure here is what makes cpm
+### blow up later in a way that's hard to diagnose)
 if ($cpanfile ne '.') {
-  system('/bin/cp', $cpanfile, "$deps_dir/cpanfile");
-  if   (-e $snapshot and !$opts{'skip-snapshot'}) { system('/bin/cp', $snapshot, "$deps_dir/cpanfile.snapshot") }
-  else                                            { system('/bin/rm', '-f',      "$deps_dir/cpanfile.snapshot") }
-  chdir($deps_dir);
+  copy_file($cpanfile, "$deps_dir/cpanfile");
+
+  my $dest_snapshot = "$deps_dir/cpanfile.snapshot";
+  if (-e $snapshot and !$opts{'skip-snapshot'}) {
+    copy_file($snapshot, $dest_snapshot);
+  }
+  elsif (-e $dest_snapshot) {
+    unlink($dest_snapshot) or die "FATAL: could not remove stale '$dest_snapshot': $!\n";
+  }
+
+  chdir($deps_dir) or die "FATAL: could not chdir to '$deps_dir': $!\n";
 }
 else { push @cpm_cmd, '.' }
 
@@ -175,10 +202,22 @@ if ($opts{'skip-snapshot'}) {
 }
 
 
-### Final cleanup
+### Final cleanup - best-effort: a good install must not be reported as failed just
+### because we couldn't remove a cache dir. (The old exec()'d '/bin/rm .cpanm*' never
+### matched, since exec() does no shell globbing - we name the real dirs here.)
 print "\n\n*** Deps instalation complete, cleaning up...\n\n";
-exec('/bin/rm', '-rf', 'local/cache', "$ENV{HOME}/.cpanm*", "$ENV{HOME}/.perl-cpm");
-die "FATAL: failed to exec() '/bin/rm': $!";
+remove_tree(
+  'local/cache', "$ENV{HOME}/.cpanm", "$ENV{HOME}/.perl-cpm",
+  { safe => 1, error => \my $cleanup_err },
+);
+if ($cleanup_err and @$cleanup_err) {
+  warn "*** WARNING: some cleanup steps failed (non-fatal):\n";
+  for my $e (@$cleanup_err) {
+    my ($f, $m) = %$e;
+    warn '***   ', ($f eq '' ? $m : "$f: $m"), "\n";
+  }
+}
+exit 0;
 
 
 ################################################
@@ -188,4 +227,87 @@ sub run_cmd {
   system(@_);
   return 0 if $? == 0;
   return $? >> 8;
+}
+
+### Copy a file, dying with context if it fails (e.g. read-only destination).
+sub copy_file {
+  my ($src, $dest) = @_;
+  copy($src, $dest) or die "FATAL: failed to copy '$src' to '$dest': $!\n";
+}
+
+### Make sure we can write into $dir: create it (and parents) if missing, otherwise
+### probe it with a real write. Dies with an actionable message when we can't - the
+### usual cause is running as a non-root user against a root-owned target.
+sub ensure_writable_dir {
+  my ($dir, $what) = @_;
+
+  unless (-d $dir) {
+    make_path($dir, { error => \my $err });
+    if ($err and @$err) {
+      my ($f, $m) = %{ $err->[0] };
+      permission_die($dir, $what, 'could not create it: ' . ($f eq '' ? $m : "$f: $m"));
+    }
+  }
+
+  permission_die($dir, $what, 'it is not writable by this user') unless dir_is_writable($dir);
+}
+
+### The most reliable writability test across uid/gid/ACL differences: actually try
+### to create (and remove) a probe file. Perl's -w only inspects mode bits.
+sub dir_is_writable {
+  my ($dir) = @_;
+  return 0 unless -d $dir;
+
+  my $probe = "$dir/.pdi-build-deps-probe-$$";
+  if (open my $fh, '>', $probe) {
+    close $fh;
+    unlink $probe;
+    return 1;
+  }
+  return 0;
+}
+
+### cpm and cpanm need a writable HOME for their caches (~/.perl-cpm, ~/.cpanm). A
+### non-root user often has HOME unset or pointing at a root-owned '/', which makes
+### cpm fail obscurely - fall back to a per-uid temp dir when that happens.
+sub ensure_writable_home {
+  my $home = $ENV{HOME};
+  return if defined $home and length $home and dir_is_writable($home);
+
+  my $tmp      = $ENV{TMPDIR} || '/tmp';
+  my $fallback = "$tmp/pdi-build-deps-home-$>";
+  make_path($fallback);
+  die "FATAL: HOME (${\ (defined $home && length $home ? $home : '<unset>')}) is not writable\n"
+    . "       and the fallback '$fallback' could not be created either.\n"
+    unless dir_is_writable($fallback);
+
+  warn "*** NOTE: HOME (${\ (defined $home && length $home ? $home : '<unset>')}) is not writable;\n"
+    . "***       using '$fallback' for cpm/cpanm caches.\n\n";
+  $ENV{HOME} = $fallback;
+}
+
+### Report a write-permission problem with enough context to fix it.
+sub permission_die {
+  my ($dir, $what, $reason) = @_;
+
+  my $euid  = $>;
+  my $me    = eval { getpwuid($euid) } // $euid;
+  my @st    = stat($dir);
+  my $owner = @st ? (eval { getpwuid($st[4]) } // $st[4]) : 'unknown';
+
+  die <<"EOF";
+FATAL: cannot write $what at '$dir' - $reason.
+
+  Running as uid $euid ($me); '$dir' is owned by $owner.
+
+  pdi-build-deps is a build-time step: run it as the user that owns the install
+  (root, or any dedicated build user) - which need not be the runtime user. That
+  build user just has to be able to write '$dir'. Fix one of:
+
+    * make '$dir' writable by uid $euid before this runs
+      (e.g. 'RUN chown -R $euid:0 $dir' or 'RUN chmod -R g+w $dir');
+    * run this as a user that already owns '$dir' (root works: 'USER root'
+      before the build step, or 'docker run -u 0 ...');
+    * point --root=<path> at a directory this user can write to.
+EOF
 }

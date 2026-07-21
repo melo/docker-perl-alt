@@ -155,6 +155,36 @@ over the environment variables; if neither is set, cpm's own defaults
 are used.
 
 
+## Which user runs `pdi-build-deps` ##
+
+`pdi-build-deps` is a **build-time** step. The recommendation is to run it as
+the user that owns the install target - **root, or any dedicated build user** -
+and to treat that as *distinct* from the user your container runs as at runtime.
+There is no requirement that the two be the same.
+
+The only hard rule: whichever user runs `pdi-build-deps` must be able to write
+the install directory (`/deps` by default, `/stack` in stack mode, or whatever
+you pass to `--root=`). In the stock images those directories are created as
+`root`, so the default `RUN cd /app && pdi-build-deps` works because build steps
+run as root.
+
+If you deliberately build (or rebuild deps at container start via
+`PDI_UPDATE_DEPS`) as a **non-root** user, make the target writable by that user
+first, for example:
+
+```dockerfile
+RUN chown -R 1000:0 /deps /stack   # or: chmod -R g+w /deps /stack
+USER 1000
+RUN cd /app && pdi-build-deps
+```
+
+`pdi-build-deps` checks this up front: if it cannot write the target it stops
+with a clear message naming the current user, the directory's owner, and how to
+fix it - rather than failing halfway through with a confusing error. (It also
+makes sure `cpm`/`cpanm` have a writable `HOME` for their caches, falling back
+to a temp dir when the current `HOME` is not writable.)
+
+
 ## Lenient installs for NO_MYMETA distributions ##
 
 `App::cpm` (the [`skaji/cpm`](https://github.com/skaji/cpm) tool we use to
