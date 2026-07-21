@@ -50,8 +50,8 @@ sub git_provenance {
 }
 
 my @versions = (
-  ['perl',       'latest', '5.42-slim', 1],
-  ['perl',       'full',   '5.42'],
+  ['perl',       'latest', '5.44-slim', 1],
+  ['perl',       'full',   '5.44'],
   ['alpine',     'latest', '3.24'],
   ['alpine',     'next',   'edge'],
   ['alpine',     'edge',   'edge'],

@@ -22,8 +22,8 @@ and the `wolfi-base` from the [Chainguard](https://www.chainguard.dev) project.
 |-------------|-------------|-------|---------|
 | `alpine:3.24` | `alpine-latest-devel` / `alpine-3.24-devel` | `alpine-latest-build` / `alpine-3.24-build`| `alpine-latest-runtime` / `alpine-3.24-runtime` |
 | `alpine:edge` | `alpine-next-devel` / `alpine-edge-devel` | `alpine-next-build` / `alpine-edge-build` | `alpine-next-runtime` / `alpine-edge-runtime` |
-| `perl:5.42-slim` | `perl-latest-devel` / `perl-5.42-slim-devel` | `perl-latest-build` / `perl-5.42-slim-build` | `perl-latest-runtime` / `perl-5.42-slim-runtime` |
-| `perl:5.42` | `perl-full-devel` / `perl-5.42-devel` | `perl-full-build` / `perl-5.42-build` | `perl-full-runtime` / `perl-5.42-runtime` |
+| `perl:5.44-slim` | `perl-latest-devel` / `perl-5.44-slim-devel` | `perl-latest-build` / `perl-5.44-slim-build` | `perl-latest-runtime` / `perl-5.44-slim-runtime` |
+| `perl:5.44` | `perl-full-devel` / `perl-5.44-devel` | `perl-full-build` / `perl-5.44-build` | `perl-full-runtime` / `perl-5.44-runtime` |
 | `cgr.dev/chainguard/wolfi-base` | `chainguard-latest-devel` | `chainguard-latest-build` | `chainguard-latest-runtime` |
 
 See below how to create a Dockerfile for your project that makes
@@ -39,8 +39,8 @@ All images are based on Alpine and Perl images and include:
   * on Alpine images, we use the system `perl`:
     * 3.24: perl 5.42.2;
     * edge: perl 5.42.2.
-  * on official Perl images, currently 5.42.2;
-  * on Chainguard images, currently 5.42.2.
+  * on official Perl images, currently 5.44.0;
+  * on Chainguard images, currently 5.44.0.
 * [cpanm](https://metacpan.org/release/App-cpanminus);
 * [Carton](https://metacpan.org/release/Carton);
 * [App::cpm](https://metacpan.org/release/App-cpm).
