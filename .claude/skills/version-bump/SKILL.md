@@ -19,16 +19,48 @@ lenient App::cpm fork as a layer (see step 3).
 
 ## Procedure
 
+> **Principle — always derive "latest" from the live source, never from memory.**
+> Your training data has a cutoff and *will* be stale: a version you "know" to be
+> current may be one or more releases behind by the time this runs. Compute every
+> "latest" from the upstream queries below. When a result matches what you already
+> expected, treat that as a reason to double-check with a second, broader query — not
+> as confirmation. Watch out especially for narrow `grep` patterns that can *miss* a
+> newer release (e.g. matching only bare `5.NN` moving tags and skipping `5.NN.0-*`
+> point tags) and thus read as "no new version" when there is one. Prefer **enumerating
+> all candidates and selecting the newest** over pattern-matching for the one you
+> expect. When in doubt, confirm ground truth by building the image and running
+> `perl -e 'print $^V'` inside it.
+
 ### 1. Check each base image against upstream
 
 | Image | Where to check latest | Notes |
 |---|---|---|
-| **perl** (`latest`=`X.Y-slim`, `full`=`X.Y`) | `curl -s "https://registry.hub.docker.com/v2/repositories/library/perl/tags?page_size=100"` | Use the latest **stable** release. Perl uses **even** minor numbers for stable (5.40, 5.42, …); **odd** minors (5.43) are development — do NOT use them. |
-| **alpine** (`latest`=`3.NN`) | https://alpinelinux.org/releases/ | Use the newest stable branch. Watch for branches nearing EOL (marked "on request"). |
+| **perl** (`latest`=`X.Y-slim`, `full`=`X.Y`) | Enumerate the perl5 git tags — see the perl snippet below | Use the latest **stable** release. Perl uses **even** minor numbers for stable (5.40, 5.42, 5.44, …); **odd** minors (5.43, 5.45) are development — do NOT use them. |
+| **alpine** (`latest`=`3.NN`) | `curl -s https://alpinelinux.org/releases/` → newest `v3.NN` | Use the newest stable branch. Watch for branches nearing EOL (marked "on request"). |
 | **alpine** (`next`/`edge`) | — | Rolling tag `edge`, never changes. |
 | **chainguard** (`latest`) | — | Rolling `wolfi-base:latest`, never changes. |
 | **cpm** installer | `https://github.com/skaji/cpm` (`main` branch, or latest release tag) | Pinned by SHA1 in `%cpm`. See cpm step below. |
 | **AWS Lambda RIE** | `https://api.github.com/repos/aws/aws-lambda-runtime-interface-emulator/releases/latest` → `tag_name` | See checksum step below. |
+
+**perl — find the newest stable release from the authoritative source, then confirm the
+base tags exist.** Do NOT infer the current version from memory, and do NOT rely on a
+single docker-tag grep (the moving `5.NN` tags can lag a fresh release, and a narrow
+pattern can miss `5.NN.0-*` point tags):
+
+```bash
+# 1. Enumerate ALL perl releases from the perl5 git tags; keep only STABLE (even minor),
+#    newest last. The final line is the target release; its 5.NN is the base tag to use.
+git ls-remote --tags --refs https://github.com/Perl/perl5 \
+  | grep -oE 'v5\.[0-9]+\.[0-9]+$' | sed 's/^v//' \
+  | awk -F. '$2 % 2 == 0' | sort -V | tail -5
+
+# 2. Confirm the moving base tags we depend on actually exist before switching to them
+#    (200 = exists, 404 = not published yet). Replace 5.NN with the minor from step 1.
+for t in 5.NN 5.NN-slim; do
+  echo "perl:$t -> $(curl -s -o /dev/null -w '%{http_code}' \
+    https://registry.hub.docker.com/v2/repositories/library/perl/tags/$t)"
+done
+```
 
 Edit `@versions` in `build` for perl/alpine. Keep the array formatting aligned.
 
@@ -123,14 +155,27 @@ must be kept in sync with `@versions` after any base-image bump.
        | grep -oE '>[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+<' | head -1
    done
 
-   # Official perl:5.NN image - resolves to the newest 5.NN.x
-   curl -s "https://registry.hub.docker.com/v2/repositories/library/perl/tags?page_size=100" \
-     | grep -oE '"name":"5\.NN\.[0-9]+"' | head -1
+   # Official perl:5.NN image - newest 5.NN.x (filter by name, then sort; do NOT
+   # `head -1` an unsorted page, and do NOT assume the minor - use the one from step 1)
+   curl -s "https://registry.hub.docker.com/v2/repositories/library/perl/tags?page_size=100&name=5.NN" \
+     | grep -oE '"name":"5\.NN\.[0-9]+"' | sort -uV | tail -1
 
-   # Chainguard wolfi-base - newest perl in the APKINDEX
+   # Chainguard wolfi-base - newest perl in the APKINDEX. NOTE: the archive index keeps
+   # many historical versions, so `sort -V | tail -1` is only the newest *present*, which
+   # can differ from what `apk add perl` actually resolves in a fresh build. Treat this as
+   # a hint and confirm ground truth from the built image (below).
    curl -s "https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz" -o /tmp/wolfi.tar.gz \
      && tar xzf /tmp/wolfi.tar.gz -C /tmp \
      && awk '/^P:perl$/{getline; print}' /tmp/APKINDEX | sort -V | tail -1
+   ```
+
+   **Ground truth beats index parsing.** After building an image (step 5 / your verify
+   build), read the real point-release straight from it — and pass `--pull=never` so you
+   don't accidentally inspect a *stale published* image instead of your fresh local build:
+
+   ```bash
+   docker run --rm --pull=never melopt/perl-alt:<family>-latest-devel \
+     perl -e 'print "$^V\n"'
    ```
 
    Update the `3.NN: perl X.Y.Z`, `edge: perl X.Y.Z`, official, and Chainguard lines to the
