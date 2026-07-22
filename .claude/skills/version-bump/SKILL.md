@@ -133,6 +133,26 @@ Every line must report `ok:` (wanted == actual). `out-of-date` means the pinned 
 doesn't match what you'll download — fix it before committing. `download-failed` means the
 fetch itself failed (e.g. GitHub rate-limit even after retries) — just re-run `--check`.
 
+Then do at least one real image build to confirm the new base actually works — don't stop
+at `--check`. Build the `devel` target of a bumped family (it exercises the base, the cpm
+bootstrap, and `pdi-build-deps --layer=devel`) and read the perl version back out of it:
+
+```bash
+./build --filter='perl-latest-devel' --debug
+docker run --rm --pull=never melopt/perl-alt:perl-latest-devel perl -e 'print "$^V\n"'
+```
+
+> **Known limitation — Chainguard `devel`/`reply` do not currently build.**
+> wolfi's perl is now 5.44, and `Perl::LanguageServer` (in `layers/devel/cpanfile`) pulls
+> in `Coro`, which fails to compile against wolfi's perl 5.44 (a `Time::HiRes` `nvtime`
+> mismatch). Coro builds fine on Alpine and the official `perl` image, so only the
+> Chainguard `devel`/`reply` targets are affected; Chainguard `build`/`runtime` are fine.
+> Because `build` dies on the first target failure and iterates targets in the order
+> `devel, build, runtime, reply`, a full `./build` run will stop at `chainguard-latest-devel`
+> **before** it reaches the working Chainguard targets — so build those explicitly, e.g.
+> `./build --filter='chainguard-latest-(build|runtime)'`. This is a deliberately
+> unsupported combination for now, not a regression from your version bump.
+
 ### 6. Update the README
 
 [`README.md`](../../../README.md) hard-codes the base image versions in two places; both

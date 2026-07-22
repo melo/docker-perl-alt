@@ -27,6 +27,11 @@ project.
 | `perl:5.44` | `perl-full-devel` / `perl-5.44-devel` | `perl-full-build` / `perl-5.44-build` | `perl-full-runtime` / `perl-5.44-runtime` |
 | `cgr.dev/chainguard/wolfi-base` | `chainguard-latest-devel` | `chainguard-latest-build` | `chainguard-latest-runtime` |
 
+> **Note:** the Chainguard `devel` image is currently unsupported — `Perl::LanguageServer`
+> pulls in `Coro`, which does not compile against wolfi's perl 5.44. The Chainguard `build`
+> and `runtime` images are unaffected; use an Alpine or official-perl `devel` image for a
+> full development environment.
+
 The rest of this document walks you through the design, then shows how to
 create a Dockerfile for your project that makes full use of this setup while
 ending up with the smallest possible final image.

@@ -101,6 +101,12 @@ COPY scripts/ /usr/bin/
 
 
 ## Final Versions: Development
+##
+## KNOWN LIMITATION: this target (and 'reply', which is FROM devel) does not
+## currently build on Chainguard. The devel layer's Perl::LanguageServer pulls in
+## Coro, which fails to compile against wolfi's perl 5.44 (a Time::HiRes 'nvtime'
+## mismatch). Coro builds fine on Alpine and the official perl image, so only the
+## Chainguard devel/reply targets are affected - build/runtime are unaffected.
 FROM build-base AS devel
 COPY --from=project / /
 
