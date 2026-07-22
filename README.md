@@ -15,8 +15,9 @@ There are three main versions of the image:
 * a `-devel` version that can be used to debug and develop
   applications: this is mostly the `-build` version with extra modules.
 
-Each of these is available in combination with an Alpine, the official Perl base image,
-and the `wolfi-base` from the [Chainguard](https://www.chainguard.dev) project.
+Each of these is available on three base images: Alpine, the official Perl
+image, and the `wolfi-base` from the [Chainguard](https://www.chainguard.dev)
+project.
 
 | Base Image  | Development | Build | Runtime |
 |-------------|-------------|-------|---------|
@@ -26,282 +27,43 @@ and the `wolfi-base` from the [Chainguard](https://www.chainguard.dev) project.
 | `perl:5.44` | `perl-full-devel` / `perl-5.44-devel` | `perl-full-build` / `perl-5.44-build` | `perl-full-runtime` / `perl-5.44-runtime` |
 | `cgr.dev/chainguard/wolfi-base` | `chainguard-latest-devel` | `chainguard-latest-build` | `chainguard-latest-runtime` |
 
-See below how to create a Dockerfile for your project that makes
-full use of this setup, while making sure that you'll end up with the
-smallest possible final image.
+The rest of this document walks you through the design, then shows how to
+create a Dockerfile for your project that makes full use of this setup while
+ending up with the smallest possible final image.
 
 
-## What's inside? ##
-
-All images are based on Alpine and Perl images and include:
-
-* [perl](https://metacpan.org/release/perl):
-  * on Alpine images, we use the system `perl`:
-    * 3.24: perl 5.42.2;
-    * edge: perl 5.42.2.
-  * on official Perl images, currently 5.44.0;
-  * on Chainguard images, currently 5.44.0.
-* [cpanm](https://metacpan.org/release/App-cpanminus);
-* [Carton](https://metacpan.org/release/Carton);
-* [App::cpm](https://metacpan.org/release/App-cpm).
-
-Some common libs and tools are also included:
-
-* `openssl`: this is not the default for Alpine, but a lot of software
-  fails to build without it;
-* `zlib`;
-* `expat`;
-* `libxml2` and `libxml-utils`;
-* `jq`.
-
-The `-build` and `-devel` versions include the development
-versions of these libraries.
-
-
-### Lambda Support (Experimental) ###
-
-The Lambda support is still experimental. It seems to work fine but we
-are not using it in production at this moment.
-
-The support includes testing your functions locally using the
-[AWS Lambda Runtime Interface Emulator][AWS-RIE].
-
-Most of the Lambda logic is provided by the excellent [AWS::Lambda][]
-Perl module. Kudos to Shogo Ichinose for this.
-
-Your handlers should be placed in the `lambda-handlers/` of your
-project. Make sure your `.pl` handlers are executable.
-
-A sample handler (named `functions.pl`) looks like this:
-
-```
-#!perl
-
-use strict;
-use warnings;
-use JSON::MaybeXS;
-
-sub echo {
-  my ($payload, $context) = @_;
-
-  return encode_json({ payload => $payload, context => { %$context } });
-}
-
-1;
-```
-
-The name of this function is `functions.echo`. The first part,
-`functions`, is the name of the handler file, `functions.pl`. The second
-part, `echo`, is the name of the sub called in that file. See
-[AWS::Lambda][] for details on writing Lambda handlers.
-
-To test the function locally, build your image then run it like this:
-
-```
-$ docker run --rm -it -p 9000:8080 your_image your_handler.your_function
-10 Dec 2022 16:31:26,839 [INFO] (rapid) exec '/var/runtime/bootstrap' (cwd=/app, handler=your_handler.your_function)
-10 Dec 2022 16:31:36,015 [INFO] (rapid) extensionsDisabledByLayer(/opt/disable-extensions-jwigqn8j) -> stat /opt/disable-extensions-jwigqn8j: no such file or directory
-10 Dec 2022 16:31:36,015 [WARNING] (rapid) Cannot list external agents error=open /opt/extensions: no such file or directory
-```
-
-You can then test with:
-```
-$ curl -XPOST 'http://localhost:9000/2015-03-31/functions/function/invocations' -d '{}'
-```
-
-The logs will show something like this:
-
-```
-START RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b Version: $LATEST
-END RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b
-REPORT RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b	Init Duration: 0.36 ms	Duration: 63.70 ms	Billed Duration: 64 ms	Memory Size: 3008 MB	Max Memory Used: 3008 MB
-```
-
-For a fully working example see [test/lambda][lambda-test] inside this repository.
-
-
-## Entrypoint ##
-
-The system includes a standard ENTRYPOINT script that sets a decent
-`PERL5LIB` based on the assumption that your app libs are under
-`/app/lib`.
-
-It will also check for submodules under `/app/elib/` and include
-all `/app/elib/*/lib` folders in `PERL5LIB`.
-
-Finally, if you need your own ENTRYPOINT script, place an executable
-at `/entrypoint` and it will be executed before the `COMMAND`.
-
-
-## cpm build timeouts ##
-
-On slow build hosts, some CPAN dists can take longer to configure or
-build than cpm's default per-phase timeouts (60s configure, 3600s
-build), causing `pdi-build-deps` to fail. You can raise these:
-
-* at build time, with the `--configure-timeout=N` / `--build-timeout=N`
-  options of `pdi-build-deps`:
-
-```dockerfile
-RUN cd /app && pdi-build-deps --build-timeout 900
-```
-
-* at runtime, when deps are (re)built at container start via
-  `PDI_UPDATE_DEPS`, with the `PDI_CPM_CONFIGURE_TIMEOUT` and
-  `PDI_CPM_BUILD_TIMEOUT` environment variables.
-
-`N` is a number of seconds. The command-line options take precedence
-over the environment variables; if neither is set, cpm's own defaults
-are used.
-
-
-## Which user runs `pdi-build-deps` ##
-
-`pdi-build-deps` is a **build-time** step. The recommendation is to run it as
-the user that owns the install target - **root, or any dedicated build user** -
-and to treat that as *distinct* from the user your container runs as at runtime.
-There is no requirement that the two be the same.
-
-The only hard rule: whichever user runs `pdi-build-deps` must be able to write
-the install directory (`/deps` by default, `/stack` in stack mode, or whatever
-you pass to `--root=`). In the stock images those directories are created as
-`root`, so the default `RUN cd /app && pdi-build-deps` works because build steps
-run as root.
-
-If you deliberately build (or rebuild deps at container start via
-`PDI_UPDATE_DEPS`) as a **non-root** user, make the target writable by that user
-first, for example:
-
-```dockerfile
-RUN chown -R 1000:0 /deps /stack   # or: chmod -R g+w /deps /stack
-USER 1000
-RUN cd /app && pdi-build-deps
-```
-
-`pdi-build-deps` checks this up front: if it cannot write the target it stops
-with a clear message naming the current user, the directory's owner, and how to
-fix it - rather than failing halfway through with a confusing error. (It also
-makes sure `cpm`/`cpanm` have a writable `HOME` for their caches, falling back
-to a temp dir when the current `HOME` is not writable.)
-
-
-## Lenient installs for NO_MYMETA distributions ##
-
-`App::cpm` (the [`skaji/cpm`](https://github.com/skaji/cpm) tool we use to
-install dependencies) prefers not to install distributions that disable
-`MYMETA` generation (`NO_MYMETA`). This is intentional on the author's
-part - see
-[skaji/cpm#311](https://github.com/skaji/cpm/issues/311).
-
-If you depend on such a distribution, run `pdi-build-deps` in *lenient*
-mode. This installs your dependencies with a small fork of `App::cpm`,
-[`melo/cpm@no-mymeta-fallback`](https://github.com/melo/cpm/tree/no-mymeta-fallback),
-that falls back to the static `META.json`/`META.yml` when no `MYMETA` is
-produced, instead of aborting:
-
-```dockerfile
-RUN cd /app && pdi-build-deps --lenient
-```
-
-You can also enable it at runtime (when deps are rebuilt at container
-start via `PDI_UPDATE_DEPS`) by setting `PDI_BUILD_DEPS_LENIENT=1`.
-
-The fork ships as an *optional* layer at `/deps/layers/app-cpm-lenient`
-that nothing loads by default; lenient mode simply prepends its `bin/` to
-`PATH` and its `lib/perl5/` to `PERL5LIB` for the duration of the install,
-so the stock `cpm` (which keeps tracking upstream `App::cpm`) is untouched
-everywhere else.
-
-> **Note:** this fork is **not** supported by the `cpm` author. Use it only
-> for the distributions that actually need it.
-
-
-## Build-time Tests ##
-
-The `pdi-run-tests` script runs during `docker build` to syntax-check
-your Perl scripts and optionally run your test suite.
-
-### Script checks ###
-
-All executable Perl scripts under `/app/bin`, `/app/sbin`, and
-`/app/lambda-handlers` are syntax-checked with `perl -wc`.
-
-### Test discovery ###
-
-Tests are **opt-in**. The script looks for a `.pdi-run-tests-ok`
-marker file to decide which test folders to run:
-
-* If `/app/t/.pdi-run-tests-ok` exists, **all** tests under `/app/t`
-  are run;
-* If it doesn't exist, each immediate subdirectory of `/app/t` is
-  checked — only those containing `.pdi-run-tests-ok` are run;
-* If no marker file is found, no tests are run.
-
-The same logic applies to submodules under `/app/elib/`. For each
-`/app/elib/<module>/t` directory, the `.pdi-run-tests-ok` gating
-works identically. Additionally, any `/app/elib/<module>/lib`
-directories are added to the include path so that tests can find
-their modules.
-
-### Usage ###
-
-Add `pdi-run-tests` as a `RUN` step in your Dockerfile, after
-copying your application code:
-
-```Dockerfile
-COPY . /app/
-RUN pdi-run-tests
-```
-
-For example, to enable tests for your app and one elib submodule:
-
-```
-touch t/.pdi-run-tests-ok
-touch elib/my-module/t/.pdi-run-tests-ok
-```
-
-Or to enable only a specific test subdirectory:
-
-```
-mkdir -p t/unit
-touch t/unit/.pdi-run-tests-ok
-# t/integration/ tests won't run (no marker file)
-```
-
-
-## Rational ##
+## Design and directory layout ##
 
 The system was designed to have a big, fully featured, build-time image,
-and another slim runtime image. A third version that you can use during
-development time can also be created with a small addition to your
-app `Dockerfile`.
+and another slim runtime image. A third version, which you can use during
+development, can also be created with a small addition to your app
+`Dockerfile`.
 
 With a Docker multi-stage build, you can use a single Dockerfile to
 build and generate all the images, including the final runtime image.
 
 The system assumes a specific directory layout for the app, the app
-dependencies, and the "stack".
+dependencies, and the "stack":
 
-* application is inside `/app`;
-* application dependencies will be installed at `/deps`;
-* stack code and dependencies will be installed at `/stack`;
+* the application lives in `/app`;
+* application dependencies are installed at `/deps`;
+* stack code and dependencies are installed at `/stack`.
 
-The fact that the stack code and dependencies are placed outside the app
-locations allow you to create Docker images with just the stack
-components that you can reuse between multiple projects. See below for
-two sample stacks, one for a Dancer2+Xslate+Starman combo, and another
-to have all the things needed to run a Minion job system.
+Keeping the stack code and dependencies outside the app locations lets you
+create Docker images with just the stack components, which you can reuse
+between multiple projects. See [Reusable stacks](#reusable-stacks) below for
+two examples: one for a Dancer2 + Text::Xslate + Starman combo, and another
+with everything needed to run a Minion job system.
 
-The reason to split your app dependencies and your code is to
-allow you to use an image with your work directory from your laptop
-mounted under `/app`. If the app dependencies are in `/deps` and only
-your code is under `/apps` you can start a container with an image
-created from your app Dockerfile, and mount the laptop work directory
-with `docker run` `-v`-option under `/app` and develop with the same
-environment as your deployment environment will look like.
+Splitting your app dependencies from your code also lets you mount your
+laptop work directory under `/app`. With the dependencies in `/deps` and
+only your code under `/app`, you can start a container built from your app
+Dockerfile, mount the laptop work directory with the `docker run` `-v`
+option under `/app`, and develop in an environment that matches your
+deployment environment.
 
 
-# How to use #
+## How to use ##
 
 Below you'll find the recommended Dockerfile. The goal is to get a fast
 build, making use as much as possible of the Docker build cache, and
@@ -309,7 +71,7 @@ provide the smallest possible image in the end.
 
 This is an ordinary application. Dependencies are tracked with
 [Carton](https://metacpan.org/pod/Carton) in a `cpanfile` with the
-associate `cpanfile.snapshot`.
+associated `cpanfile.snapshot`.
 
 You should be able to just copy&paste this sample `Dockerfile` to your
 app work directory, and tweak the `apk add` lines to make sure that
@@ -389,7 +151,184 @@ COPY --from=builder /app/ /app/
 CMD [ "your_app_start_command.pl" ]
 ```
 
-## Reuseable Stacks ##
+
+## What's inside? ##
+
+All images include:
+
+* [perl](https://metacpan.org/release/perl):
+  * on Alpine images, we use the system `perl`:
+    * 3.24: perl 5.42.2;
+    * edge: perl 5.42.2.
+  * on official Perl images, currently 5.44.0;
+  * on Chainguard images, currently 5.44.0.
+* [cpanm](https://metacpan.org/release/App-cpanminus);
+* [Carton](https://metacpan.org/release/Carton);
+* [App::cpm](https://metacpan.org/release/App-cpm).
+
+Some common libs and tools are also included:
+
+* `openssl`: this is not the default for Alpine, but a lot of software
+  fails to build without it;
+* `zlib`;
+* `expat`;
+* `libxml2` and `libxml-utils`;
+* `jq`.
+
+The `-build` and `-devel` versions include the development
+versions of these libraries.
+
+
+## Entrypoint ##
+
+The system includes a standard ENTRYPOINT script that sets a decent
+`PERL5LIB` based on the assumption that your app libs are under
+`/app/lib`.
+
+It will also check for submodules under `/app/elib/` and include
+all `/app/elib/*/lib` folders in `PERL5LIB`.
+
+Finally, if you need your own ENTRYPOINT script, place an executable
+at `/entrypoint` and it will be executed before the `COMMAND`.
+
+
+## Build-time tests ##
+
+The `pdi-run-tests` script runs during `docker build` to syntax-check
+your Perl scripts and optionally run your test suite.
+
+### Script checks ###
+
+All executable Perl scripts under `/app/bin`, `/app/sbin`, and
+`/app/lambda-handlers` are syntax-checked with `perl -wc`.
+
+### Test discovery ###
+
+Tests are **opt-in**. The script looks for a `.pdi-run-tests-ok`
+marker file to decide which test folders to run:
+
+* If `/app/t/.pdi-run-tests-ok` exists, **all** tests under `/app/t`
+  are run;
+* If it doesn't exist, each immediate subdirectory of `/app/t` is
+  checked — only those containing `.pdi-run-tests-ok` are run;
+* If no marker file is found, no tests are run.
+
+The same logic applies to submodules under `/app/elib/`. For each
+`/app/elib/<module>/t` directory, the `.pdi-run-tests-ok` gating
+works identically. Additionally, any `/app/elib/<module>/lib`
+directories are added to the include path so that tests can find
+their modules.
+
+### Usage ###
+
+Add `pdi-run-tests` as a `RUN` step in your Dockerfile, after
+copying your application code:
+
+```Dockerfile
+COPY . /app/
+RUN pdi-run-tests
+```
+
+For example, to enable tests for your app and one elib submodule:
+
+```
+touch t/.pdi-run-tests-ok
+touch elib/my-module/t/.pdi-run-tests-ok
+```
+
+Or to enable only a specific test subdirectory:
+
+```
+mkdir -p t/unit
+touch t/unit/.pdi-run-tests-ok
+# t/integration/ tests won't run (no marker file)
+```
+
+
+## Which user runs `pdi-build-deps` ##
+
+`pdi-build-deps` is a **build-time** step. The recommendation is to run it as
+the user that owns the install target - **root, or any dedicated build user** -
+and to treat that as *distinct* from the user your container runs as at runtime.
+There is no requirement that the two be the same.
+
+The only hard rule: whichever user runs `pdi-build-deps` must be able to write
+the install directory (`/deps` by default, `/stack` in stack mode, or whatever
+you pass to `--root=`). In the stock images those directories are created as
+`root`, so the default `RUN cd /app && pdi-build-deps` works because build steps
+run as root.
+
+If you deliberately build (or rebuild deps at container start via
+`PDI_UPDATE_DEPS`) as a **non-root** user, make the target writable by that user
+first, for example:
+
+```dockerfile
+RUN chown -R 1000:0 /deps /stack   # or: chmod -R g+w /deps /stack
+USER 1000
+RUN cd /app && pdi-build-deps
+```
+
+`pdi-build-deps` checks this up front: if it cannot write the target it stops
+with a clear message naming the current user, the directory's owner, and how to
+fix it - rather than failing halfway through with a confusing error. (It also
+makes sure `cpm`/`cpanm` have a writable `HOME` for their caches, falling back
+to a temp dir when the current `HOME` is not writable.)
+
+
+## cpm build timeouts ##
+
+On slow build hosts, some CPAN dists can take longer to configure or
+build than cpm's default per-phase timeouts (60s configure, 3600s
+build), causing `pdi-build-deps` to fail. You can raise these:
+
+* at build time, with the `--configure-timeout=N` / `--build-timeout=N`
+  options of `pdi-build-deps`:
+
+```dockerfile
+RUN cd /app && pdi-build-deps --build-timeout 900
+```
+
+* at runtime, when deps are (re)built at container start via
+  `PDI_UPDATE_DEPS`, with the `PDI_CPM_CONFIGURE_TIMEOUT` and
+  `PDI_CPM_BUILD_TIMEOUT` environment variables.
+
+`N` is a number of seconds. The command-line options take precedence
+over the environment variables; if neither is set, cpm's own defaults
+are used.
+
+
+## Lenient installs for NO_MYMETA distributions ##
+
+`App::cpm` (the [`skaji/cpm`](https://github.com/skaji/cpm) tool we use to
+install dependencies) prefers not to install distributions that disable
+`MYMETA` generation (`NO_MYMETA`). This is intentional on the author's
+part - see
+[skaji/cpm#311](https://github.com/skaji/cpm/issues/311).
+
+If you depend on such a distribution, run `pdi-build-deps` in *lenient*
+mode. This installs your dependencies with a small fork of `App::cpm`,
+[`melo/cpm@no-mymeta-fallback`](https://github.com/melo/cpm/tree/no-mymeta-fallback),
+that falls back to the static `META.json`/`META.yml` when no `MYMETA` is
+produced, instead of aborting:
+
+```dockerfile
+RUN cd /app && pdi-build-deps --lenient
+```
+
+You can also enable it at runtime (when deps are rebuilt at container
+start via `PDI_UPDATE_DEPS`) by setting `PDI_BUILD_DEPS_LENIENT=1`.
+
+The fork ships as an *optional* layer at `/deps/layers/app-cpm-lenient`
+that nothing loads by default; lenient mode simply prepends its `bin/` to
+`PATH` and its `lib/perl5/` to `PERL5LIB` for the duration of the install,
+so the stock `cpm` (which keeps tracking upstream `App::cpm`) is untouched
+everywhere else.
+
+> **Note:** this fork is **not** supported by the `cpm` author. Use it only
+> for the distributions that actually need it.
+
+
+## Reusable stacks ##
 
 You can also make stacks with commonly used combinations of packages.
 The setup is almost the same, the only difference is that when
@@ -496,12 +435,74 @@ ENTRYPOINT [ "/stack/bin/minion-entrypoint" ]
 ```
 
 
-# Repository #
+## Lambda support (experimental) ##
+
+The Lambda support is still experimental. It seems to work fine but we
+are not using it in production at this moment.
+
+The support includes testing your functions locally using the
+[AWS Lambda Runtime Interface Emulator][AWS-RIE].
+
+Most of the Lambda logic is provided by the excellent [AWS::Lambda][]
+Perl module. Kudos to Shogo Ichinose for this.
+
+Your handlers should be placed in the `lambda-handlers/` of your
+project. Make sure your `.pl` handlers are executable.
+
+A sample handler (named `functions.pl`) looks like this:
+
+```
+#!perl
+
+use strict;
+use warnings;
+use JSON::MaybeXS;
+
+sub echo {
+  my ($payload, $context) = @_;
+
+  return encode_json({ payload => $payload, context => { %$context } });
+}
+
+1;
+```
+
+The name of this function is `functions.echo`. The first part,
+`functions`, is the name of the handler file, `functions.pl`. The second
+part, `echo`, is the name of the sub called in that file. See
+[AWS::Lambda][] for details on writing Lambda handlers.
+
+To test the function locally, build your image then run it like this:
+
+```
+$ docker run --rm -it -p 9000:8080 your_image your_handler.your_function
+10 Dec 2022 16:31:26,839 [INFO] (rapid) exec '/var/runtime/bootstrap' (cwd=/app, handler=your_handler.your_function)
+10 Dec 2022 16:31:36,015 [INFO] (rapid) extensionsDisabledByLayer(/opt/disable-extensions-jwigqn8j) -> stat /opt/disable-extensions-jwigqn8j: no such file or directory
+10 Dec 2022 16:31:36,015 [WARNING] (rapid) Cannot list external agents error=open /opt/extensions: no such file or directory
+```
+
+You can then test with:
+```
+$ curl -XPOST 'http://localhost:9000/2015-03-31/functions/function/invocations' -d '{}'
+```
+
+The logs will show something like this:
+
+```
+START RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b Version: $LATEST
+END RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b
+REPORT RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b	Init Duration: 0.36 ms	Duration: 63.70 ms	Billed Duration: 64 ms	Memory Size: 3008 MB	Max Memory Used: 3008 MB
+```
+
+For a fully working example see [test/lambda][lambda-test] inside this repository.
+
+
+## Repository ##
 
 This image source repository is at [https://github.com/melo/docker-perl-alt][repo].
 
 
-# Author #
+## Author ##
 
 Pedro Melo [melo@simplicidade.org](mailto:melo@simplicidade.org)
 
