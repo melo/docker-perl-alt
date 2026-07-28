@@ -15,6 +15,15 @@ There are three main versions of the image:
 * a `-devel` version that can be used to debug and develop
   applications: this is mostly the `-build` version with extra modules.
 
+Two extra variants build on those:
+
+* a `-reply` version &mdash; the `-devel` image with a
+  [`Reply`](https://metacpan.org/pod/Reply) read-eval-print loop as its
+  default command, handy for interactive experimentation;
+* a `-runtime-lambda` version &mdash; the `-runtime` image plus the AWS Lambda
+  Runtime Interface Emulator for local Lambda testing (see the note below the
+  table).
+
 Each of these is available on three base images: Alpine, the official Perl
 image, and the `wolfi-base` from the [Chainguard](https://www.chainguard.dev)
 project.
@@ -539,38 +548,11 @@ REPORT RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b	Init Duration: 0.36 ms	Du
 For a fully working example see [test/lambda][lambda-test] inside this repository.
 
 
-## Publishing (maintainers) ##
+## Contributing ##
 
-The [`build`](build) script is the single source of truth for the image
-matrix: the base versions, the tag scheme, the pinned `cpm` and Lambda
-RIE checksums, and the OCI labels. `./build --check` verifies the pinned
-checksums against their live sources; `./build --emit-matrix` prints the
-whole plan as JSON.
-
-Images are built and pushed by GitHub Actions
-([`.github/workflows/publish.yml`](.github/workflows/publish.yml)), which
-consumes `build --emit-matrix` so it never re-hardcodes any of the above.
-It builds every image **natively** on `amd64` and `arm64` runners (no
-QEMU), pushes each architecture by digest to both registries, and then
-assembles the multi-arch manifest lists. It runs on pushes to `master`
-that touch the build inputs, on a weekly schedule (to pick up base-image
-security patches), and on manual dispatch (with an optional tag filter).
-
-Two secrets are required for the Docker Hub push:
-
-* `DOCKERHUB_USERNAME` &mdash; account (or robot) with push access to
-  `melopt/perl-alt`;
-* `DOCKERHUB_TOKEN` &mdash; a Docker Hub access token with Read & Write.
-
-The GHCR push uses the built-in `GITHUB_TOKEN` (the jobs request
-`packages: write`); the first run creates the `perl-alt` package, which
-you may want to flip from private to public in the repository's package
-settings.
-
-The Chainguard `devel`/`reply` targets are deliberately excluded from the
-matrix &mdash; they pull in `Coro`, which does not compile against
-wolfi's perl 5.44 (see the note in
-[`Dockerfile.chainguard`](Dockerfile.chainguard)).
+Maintainer documentation &mdash; how the images are built and published, the
+required secrets, and how to prune stale tags &mdash; lives in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 
 ## Repository ##
