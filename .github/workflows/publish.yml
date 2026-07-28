@@ -154,6 +154,10 @@ jobs:
 
   merge:
     needs: [prepare, build]
+    # Run even if some build jobs failed: each merge only publishes its own image and
+    # bails (below) unless it has both arch digests, so one broken image can never block
+    # publishing all the others. Still requires the plan (prepare) to have succeeded.
+    if: ${{ always() && needs.prepare.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
