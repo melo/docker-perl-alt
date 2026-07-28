@@ -228,20 +228,12 @@ jobs:
   # ever changes.
   finalize:
     needs: [prepare, build, merge]
-    if: ${{ always() && needs.prepare.result == 'success' }}
+    if: ${{ always() && needs.merge.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Download perl-latest-runtime digests
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          path: /tmp/digests
-          pattern: digest-perl-latest-runtime-*
-          merge-multiple: true
-
       - uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
@@ -260,15 +252,15 @@ jobs:
       - name: Re-push the latest tag last
         run: |
           set -euo pipefail
-          count=$(find /tmp/digests -type f 2>/dev/null | wc -l | tr -d ' ')
-          if [ "${count:-0}" -lt 2 ]; then
-            echo "perl-latest-runtime digests unavailable (its build/merge failed?); skipping"
-            exit 0
-          fi
-          digests="$(cat /tmp/digests/*)"
+          # Re-tag the existing perl-latest-runtime manifest list (same digest) onto
+          # `latest`, as the last push of the run. Sourcing the existing tag keeps
+          # `latest` and `perl-latest-runtime` on one index version instead of minting
+          # a second, equivalent one.
           for repo in "${DOCKERHUB_REPO}" "${GHCR_REPO}"; do
-            srcs=""; for d in $digests; do srcs="$srcs ${repo}@${d}"; done
-            echo ">>> re-pushing ${repo}:latest (final)"
-            # shellcheck disable=SC2086
-            docker buildx imagetools create -t "${repo}:latest" $srcs
+            if docker buildx imagetools inspect "${repo}:perl-latest-runtime" >/dev/null 2>&1; then
+              echo ">>> ${repo}:latest -> ${repo}:perl-latest-runtime (final)"
+              docker buildx imagetools create -t "${repo}:latest" "${repo}:perl-latest-runtime"
+            else
+              echo "${repo}:perl-latest-runtime not found; skipping latest re-push"
+            fi
           done
