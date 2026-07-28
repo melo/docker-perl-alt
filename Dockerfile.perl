@@ -22,7 +22,7 @@ COPY --from=cpm /cpm /usr/local/bin/cpm-bootstrap
 ## cpm), then we drop the fatpacked bootstrap.
 RUN apt update                                                                       \
     && apt install -y --no-install-recommends                                        \
-    curl wget make zlib1g libssl3 libexpat1 gnupg libxml2 libxml2-utils jq           \
+    curl make zlib1g libssl3 libexpat1 libxml2 jq                                    \
     build-essential                                                                  \
     && apt upgrade -y                                                                \
     && cpm-bootstrap install -g --no-test                                            \
@@ -31,8 +31,14 @@ RUN apt update                                                                  
     && rm -rf ~/.perl-cpm ~/.cpanm                                                   \
     && rm -f /usr/local/bin/cpm-bootstrap                                            \
     && mkdir -p /app /deps /stack                                                    \
-    && apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false      \
-    && apt autoremove -y build-essential                                             \
+    ## Purge the C toolchain from the runtime image. `apt autoremove build-essential`
+    ## alone leaves orphaned toolchain packages behind - notably linux-libc-dev and
+    ## libc6-dev, which by themselves account for ~40 HIGH + 1 CRITICAL CVE (kernel
+    ## headers, non-exploitable in a container but still flagged). Purge them explicitly,
+    ## then sweep the now-orphaned gcc/cpp/binutils/dpkg-dev. build-base re-adds the
+    ## toolchain for the -build/-devel targets, so runtime loses nothing it needs.
+    && apt-get purge -y build-essential libc6-dev linux-libc-dev                      \
+    && apt-get autoremove -y --purge -o APT::AutoRemove::RecommendsImportant=false    \
     && rm -fr /var/cache/apt/* /var/lib/apt/lists/* /var/cache/debconf/*
 
 

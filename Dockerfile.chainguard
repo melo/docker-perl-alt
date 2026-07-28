@@ -20,8 +20,8 @@ COPY --from=cpm /cpm /usr/local/bin/cpm-bootstrap
 
 ## Bootstrap installs the official App::cpm (whose own /usr/local/bin/cpm becomes THE
 ## cpm), then we drop the fatpacked bootstrap.
-RUN apk --no-cache add curl wget perl make ca-certificates zlib openssl   \
-    zlib expat gnupg libxml2 libxml2-utils jq tzdata                      \
+RUN apk --no-cache add curl perl make ca-certificates zlib openssl        \
+    expat libxml2 jq tzdata                                               \
     build-base perl-dev                                                   \
     && apk --no-cache upgrade                                             \
     && cpm-bootstrap install -g --no-test                                 \
