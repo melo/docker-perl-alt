@@ -1,0 +1,90 @@
+name: Prune stale Docker Hub tags
+
+# Deletes Docker Hub tags that this project no longer produces. The keep-set is
+# computed dynamically so it never goes stale:
+#   keep = tags emitted by `build --emit-matrix`  UNION  version-pinned tags
+#          (perl-5.N* / alpine-3.N*, which clients may pin to)
+#   delete = everything else on the repo
+#
+# Manual-dispatch only, and DRY-RUN BY DEFAULT: the first run just lists what it
+# would delete. Re-run with dry_run=false to actually delete. Deletion is
+# irreversible, so read the dry-run list first.
+#
+# Uses the same DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets as publishing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would be deleted, but do NOT delete"
+        type: boolean
+        default: true
+
+env:
+  DOCKERHUB_REPO: melopt/perl-alt
+  # Version-pinned tags to always keep, even though the current build doesn't
+  # regenerate them (frozen images clients may pin to).
+  KEEP_REGEX: '^(perl-5\.[0-9]|alpine-3\.[0-9])'
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Perl modules ./build needs
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpath-tiny-perl
+
+      - name: Compute keep / delete sets
+        run: |
+          set -euo pipefail
+
+          # tags this build currently generates
+          perl build --emit-matrix | jq -r '.images[].tags[]' | sort -u > /tmp/generated.txt
+
+          # every tag currently on the repo (paginated)
+          url="https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/tags?page_size=100"
+          : > /tmp/hub.txt
+          while [ -n "$url" ] && [ "$url" != "null" ]; do
+            resp="$(curl -fsSL "$url")"
+            echo "$resp" | jq -r '.results[].name' >> /tmp/hub.txt
+            url="$(echo "$resp" | jq -r '.next // ""')"
+          done
+          sort -u -o /tmp/hub.txt /tmp/hub.txt
+
+          # keep = generated  UNION  version-pinned
+          { cat /tmp/generated.txt; grep -E "$KEEP_REGEX" /tmp/hub.txt || true; } | sort -u > /tmp/keep.txt
+          comm -23 /tmp/hub.txt /tmp/keep.txt > /tmp/delete.txt
+
+          {
+            echo "### Tags on repo: $(wc -l < /tmp/hub.txt) | keep: $(wc -l < /tmp/keep.txt) | delete: $(wc -l < /tmp/delete.txt)"
+            echo ""
+            echo "#### Would DELETE"
+            sed 's/^/- /' /tmp/delete.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "=== DELETE ($(wc -l < /tmp/delete.txt)) ==="; cat /tmp/delete.txt
+          echo "=== KEEP ($(wc -l < /tmp/keep.txt)) ==="; cat /tmp/keep.txt
+
+      - name: Delete stale tags
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          jwt="$(curl -fsSL -H 'Content-Type: application/json' \
+            -d "{\"username\":\"${DH_USER}\",\"password\":\"${DH_TOKEN}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r '.token // ""')"
+          if [ -z "$jwt" ]; then echo "::error::Docker Hub login failed"; exit 1; fi
+
+          rc=0
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            code="$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+              -H "Authorization: JWT ${jwt}" \
+              "https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/tags/${tag}/")"
+            echo ">>> ${tag}: HTTP ${code}"
+            case "$code" in 2*) ;; *) echo "::warning::failed to delete ${tag} (HTTP ${code})"; rc=1 ;; esac
+          done < /tmp/delete.txt
+          exit $rc
