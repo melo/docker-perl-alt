@@ -340,6 +340,9 @@ install dependencies) prefers not to install distributions that disable
 part - see
 [skaji/cpm#311](https://github.com/skaji/cpm/issues/311).
 
+> **Note:** this fork is **not** supported by the `cpm` author. Use it only
+> for the distributions that actually need it.
+
 If you depend on such a distribution, run `pdi-build-deps` in *lenient*
 mode. This installs your dependencies with a small fork of `App::cpm`,
 [`melo/cpm@no-mymeta-fallback`](https://github.com/melo/cpm/tree/no-mymeta-fallback),
@@ -358,9 +361,6 @@ that nothing loads by default; lenient mode simply prepends its `bin/` to
 `PATH` and its `lib/perl5/` to `PERL5LIB` for the duration of the install,
 so the stock `cpm` (which keeps tracking upstream `App::cpm`) is untouched
 everywhere else.
-
-> **Note:** this fork is **not** supported by the `cpm` author. Use it only
-> for the distributions that actually need it.
 
 
 ## Reusable stacks ##
