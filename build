@@ -60,20 +60,11 @@ my @versions = (
   ['chainguard', 'latest', 'latest', undef, 'cgr.dev/chainguard/wolfi-base'],
 );
 
-## (family, target) pairs we deliberately do NOT build. The devel/reply targets pull
-## in Perl::LanguageServer -> Coro, and Coro 6.57 (the latest, unmaintained) fails to
-## compile against any *threaded* perl >= 5.42: its State.xs calls nvtime(aTHX), which
-## on a threaded perl expands to nvtime(my_perl) - one argument too many now that
-## Time::HiRes' nvtime is 0-arg ("too many arguments to function 'nvtime'"). Both the
-## Alpine system perl (5.42.2, useithreads=define) and wolfi's perl (5.44) are threaded,
-## so devel/reply cannot build there. The official perl image is non-threaded
-## (useithreads=undef), where nvtime(aTHX) -> nvtime() compiles - so perl-* devel/reply
-## are fine and stay in the matrix. Skipping the unbuildable pairs keeps a full
-## `./build` (and the CI matrix) green instead of dying on a target that can't work.
-my %skip = (
-  alpine     => { devel => 1, reply => 1 },
-  chainguard => { devel => 1, reply => 1 },
-);
+## (family, target) pairs we deliberately do NOT build. Currently none: devel/reply
+## build on every base. (They previously failed on threaded perl >= 5.42 because
+## Perl::LanguageServer dragged in Coro 6.57, which does not compile there; we dropped
+## Perl::LanguageServer from the devel layer, so the whole class of failure is gone.)
+my %skip = ();
 sub is_skipped { my ($f, $target) = @_; return $skip{$f} && $skip{$f}{$target} }
 
 ## Single source of truth for what gets built and how it is tagged. Returns a list of
@@ -89,7 +80,7 @@ sub image_matrix {
     my $baset = "$f-$t";
     my $basev = "$f-$v";
 
-    for my $target (qw( devel build runtime reply )) {
+    for my $target (qw( devel build runtime runtime-lambda reply )) {
       next if is_skipped($f, $target);
 
       my $tagx = $x                         ? $target  : '';

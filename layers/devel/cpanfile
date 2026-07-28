@@ -4,7 +4,6 @@ requires 'Code::TidyAll::Plugin::PerlTidy';
 requires 'Code::TidyAll::Plugin::PodTidy';
 requires 'Code::TidyAll::Plugin::SortLines';
 requires 'Code::TidyAll';
-requires 'Perl::LanguageServer', '2.0';
 requires 'Perl::Tidy';
 requires 'Pod::Tidy';
 requires 'Reply', '0.42';

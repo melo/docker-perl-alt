@@ -51,7 +51,19 @@ if ($lambda_env_type) {
   $ENV{LAMBDA_TASK_ROOT}    = "$lambda_handlers";
   $ENV{LAMBDA_RUNTIME_DIR}  = "$lambda_runtime";
 
-  push @entrypoint, '/usr/local/bin/aws-lambda-rie' if $lambda_env_type eq 'rie';
+  if ($lambda_env_type eq 'rie') {
+    ## The RIE ships only in the -runtime-lambda and -devel images (it carries
+    ## Go-stdlib CVEs, so the lean -runtime/-build images omit it). If it isn't here,
+    ## warn instead of failing the exec - the user can mount it or use a bundled image.
+    if (-x '/usr/local/bin/aws-lambda-rie') {
+      push @entrypoint, '/usr/local/bin/aws-lambda-rie';
+    }
+    else {
+      warn "*** WARNING: RIE (local Lambda emulator) requested but not present at\n"
+        . "***          /usr/local/bin/aws-lambda-rie. Use a -runtime-lambda or -devel\n"
+        . "***          image, or mount the RIE binary at that path.\n";
+    }
+  }
   push @entrypoint, $lambda_runtime->child('bootstrap')->stringify;
 }
 

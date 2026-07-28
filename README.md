@@ -27,10 +27,15 @@ project.
 | `perl:5.44` | `perl-full-devel` / `perl-5.44-devel` | `perl-full-build` / `perl-5.44-build` | `perl-full-runtime` / `perl-5.44-runtime` |
 | `cgr.dev/chainguard/wolfi-base` | `chainguard-latest-devel` | `chainguard-latest-build` | `chainguard-latest-runtime` |
 
-> **Note:** the Chainguard `devel` image is currently unsupported — `Perl::LanguageServer`
-> pulls in `Coro`, which does not compile against wolfi's perl 5.44. The Chainguard `build`
-> and `runtime` images are unaffected; use an Alpine or official-perl `devel` image for a
-> full development environment.
+> **Note — the Lambda variant carries many CVEs.** Every base also publishes a
+> `-runtime-lambda` variant (e.g. `perl-latest-runtime-lambda`,
+> `alpine-latest-runtime-lambda`, `chainguard-latest-runtime-lambda`): the plain
+> `-runtime` image plus the AWS Lambda Runtime Interface Emulator for local
+> testing (see [Lambda support](#lambda-support-experimental)). That emulator is a
+> Go binary that carries a **large number of Go-stdlib vulnerabilities**, so it is
+> bundled only in the `-runtime-lambda` and `-devel` images; the plain `-runtime`
+> and `-build` images deliberately omit it. Deploy `-runtime`; reach for
+> `-runtime-lambda` (or `-devel`) only when you need the local emulator.
 
 The rest of this document walks you through the design, then shows how to
 create a Dockerfile for your project that makes full use of this setup while
@@ -502,7 +507,14 @@ The name of this function is `functions.echo`. The first part,
 part, `echo`, is the name of the sub called in that file. See
 [AWS::Lambda][] for details on writing Lambda handlers.
 
-To test the function locally, build your image then run it like this:
+Local testing uses the AWS Lambda Runtime Interface Emulator (RIE). Because that
+emulator carries a large number of CVEs, it is **not** in the plain `-runtime`
+images — build your test image `FROM` a `-runtime-lambda` (or `-devel`) base,
+which bundle it. For a deployed Lambda you can use the leaner plain `-runtime`
+image: on real AWS Lambda the RIE is not used at all.
+
+To test the function locally, build your image (from a `-runtime-lambda` base)
+then run it like this:
 
 ```
 $ docker run --rm -it -p 9000:8080 your_image your_handler.your_function

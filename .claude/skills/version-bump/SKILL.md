@@ -142,16 +142,12 @@ bootstrap, and `pdi-build-deps --layer=devel`) and read the perl version back ou
 docker run --rm --pull=never melopt/perl-alt:perl-latest-devel perl -e 'print "$^V\n"'
 ```
 
-> **Known limitation — Chainguard `devel`/`reply` do not currently build.**
-> wolfi's perl is now 5.44, and `Perl::LanguageServer` (in `layers/devel/cpanfile`) pulls
-> in `Coro`, which fails to compile against wolfi's perl 5.44 (a `Time::HiRes` `nvtime`
-> mismatch). Coro builds fine on Alpine and the official `perl` image, so only the
-> Chainguard `devel`/`reply` targets are affected; Chainguard `build`/`runtime` are fine.
-> Because `build` dies on the first target failure and iterates targets in the order
-> `devel, build, runtime, reply`, a full `./build` run will stop at `chainguard-latest-devel`
-> **before** it reaches the working Chainguard targets — so build those explicitly, e.g.
-> `./build --filter='chainguard-latest-(build|runtime)'`. This is a deliberately
-> unsupported combination for now, not a regression from your version bump.
+> **Note — devel builds on every base.** `devel`/`reply` used to fail on threaded
+> perl ≥ 5.42 (alpine, wolfi) because `Perl::LanguageServer` dragged in `Coro` 6.57,
+> which won't compile there. `Perl::LanguageServer` was dropped from
+> `layers/devel/cpanfile`, so that whole failure class is gone and all bases build all
+> targets. If a future bump reintroduces a module with the same `Coro`/`nvtime` problem,
+> that's the thing to look for.
 
 ### 6. Update the README
 

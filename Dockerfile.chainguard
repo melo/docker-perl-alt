@@ -34,27 +34,6 @@ RUN apk --no-cache add curl perl make ca-certificates zlib openssl        \
     && mkdir -p /app /deps /stack
 
 
-## AWS Lambda Emulator support
-ARG AWS_LAMBDA_RIE_URL_aarch64="unknown"
-ARG AWS_LAMBDA_RIE_SIG_aarch64="unknown"
-ARG AWS_LAMBDA_RIE_URL_x86_64="unknown"
-ARG AWS_LAMBDA_RIE_SIG_x86_64="unknown"
-
-RUN mkdir -p /usr/local/bin                                        \
-    && cd /usr/local/bin                                           \
-    && arch=`uname -m`                                             \
-    && url="AWS_LAMBDA_RIE_URL_$arch"                              \
-    && sig="AWS_LAMBDA_RIE_SIG_$arch"                              \
-    && echo ">>>> arch $arch"                                      \
-    && sh -c "echo '>>>> url ' \${$url}"                           \
-    && sh -c "echo '>>>> sig ' \${$sig}"                           \
-    && sh -c "curl -Lo ./aws-lambda-rie \${$url}"                  \
-    && chmod +x ./aws-lambda-rie                                   \
-    && sh -c "echo \${$sig} ' aws-lambda-rie'" > ./.sig            \
-    && sha256sum -c .sig                                           \
-    && rm .sig
-
-
 ## The setup...
 ENV PATH=/app/bin:/deps/bin:/deps/local/bin:/stack/bin:/stack/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WORKDIR /app
@@ -91,6 +70,29 @@ RUN mkdir -p /deps/layers/app-cpm-lenient/bin /deps/layers/app-cpm-lenient/lib/p
     && rm -rf /tmp/cpm-*
 
 
+## AWS Lambda Runtime Interface Emulator (local testing only)
+##
+## The RIE is a Go binary that carries a number of Go-stdlib CVEs, and on real AWS
+## Lambda it is never used (AWS provides its own runtime interface client). We build it
+## in its own stage and bake it only into the -devel and -runtime-lambda images; the
+## plain -runtime and -build images stay free of its CVEs. AWS's own guidance is likewise
+## to keep the RIE out of the deployed image.
+FROM runtime-base AS aws-lambda-rie
+ARG AWS_LAMBDA_RIE_URL_aarch64="unknown"
+ARG AWS_LAMBDA_RIE_SIG_aarch64="unknown"
+ARG AWS_LAMBDA_RIE_URL_x86_64="unknown"
+ARG AWS_LAMBDA_RIE_SIG_x86_64="unknown"
+RUN mkdir -p /usr/local/bin && cd /usr/local/bin                   \
+    && arch=`uname -m`                                             \
+    && url="AWS_LAMBDA_RIE_URL_$arch"                              \
+    && sig="AWS_LAMBDA_RIE_SIG_$arch"                              \
+    && sh -c "curl -Lo ./aws-lambda-rie \${$url}"                  \
+    && chmod +x ./aws-lambda-rie                                   \
+    && sh -c "echo \${$sig} ' aws-lambda-rie'" > ./.sig            \
+    && sha256sum -c .sig                                           \
+    && rm .sig
+
+
 ## Our files
 FROM scratch AS project
 
@@ -101,14 +103,10 @@ COPY scripts/ /usr/bin/
 
 
 ## Final Versions: Development
-##
-## KNOWN LIMITATION: this target (and 'reply', which is FROM devel) does not
-## currently build on Chainguard. The devel layer's Perl::LanguageServer pulls in
-## Coro, which fails to compile against wolfi's perl 5.44 (a Time::HiRes 'nvtime'
-## mismatch). Coro builds fine on Alpine and the official perl image, so only the
-## Chainguard devel/reply targets are affected - build/runtime are unaffected.
 FROM build-base AS devel
 COPY --from=project / /
+## devel images bundle the RIE for local Lambda testing (carries Go-stdlib CVEs)
+COPY --from=aws-lambda-rie /usr/local/bin/aws-lambda-rie /usr/local/bin/aws-lambda-rie
 
 RUN pdi-build-deps --layer=devel  \
     && echo 'eval $( pdi-perl-env )' > /etc/profile.d/perl_env.sh
@@ -122,6 +120,15 @@ COPY --from=project / /
 ## Final Versions: Runtime
 FROM runtime-base AS runtime
 COPY --from=project / /
+
+
+## Final Versions: Runtime + Lambda RIE
+##
+## Deployable Lambda image: the plain runtime plus the AWS RIE for local emulation.
+## NOTE: this variant carries the RIE's Go-stdlib CVEs - prefer -runtime for anything
+## that does not need the local Lambda emulator.
+FROM runtime AS runtime-lambda
+COPY --from=aws-lambda-rie /usr/local/bin/aws-lambda-rie /usr/local/bin/aws-lambda-rie
 
 
 ## Final Versions: Repl
