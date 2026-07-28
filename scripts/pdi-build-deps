@@ -5,6 +5,7 @@ use warnings;
 use Getopt::Long;
 use File::Copy qw(copy);
 use File::Path qw(make_path remove_tree);
+use File::Temp qw(tempdir);
 
 ################################################
 # Usage
@@ -138,18 +139,37 @@ push @cpm_cmd, '--build-timeout',     $build_timeout     if defined $build_timeo
 my @carton_cmd = ('carton', 'install');
 push @carton_cmd, '--deployment' unless $opts{'skip-snapshot'} or not -e $snapshot;
 
+### cpm renamed its phase/relationship selection flags across versions: current cpm
+### uses --top-level-phase/--top-level-relationship, while older cpm (still baked into
+### some published base images, lenient-fork layers, and client-pinned bases) only
+### knows the legacy --with-*/--without-* flags and HARD-FAILS with
+### "Unknown option: top-level-phase" on the new ones. Probe the cpm we are actually
+### about to run (PATH already includes the lenient layer when --lenient) and use the
+### flavour it understands, so a cpm version skew never breaks the build.
+my $cpm_has_top_level = cpm_supports_top_level();
+print "*** NOTE: this cpm predates --top-level-* flags; falling back to the legacy\n"
+    . "***       --with/--without-* flags (functionally equivalent for our use).\n\n"
+  unless $cpm_has_top_level;
+
 if ($opts{all}) {
-  ## Every phase and relationship. The old --with-develop/--with-configure/--with-suggests
-  ## flags are deprecated in current cpm; --top-level-* is the replacement.
-  push @cpm_cmd, '--top-level-phase', 'configure,build,test,runtime,develop';
-  push @cpm_cmd, '--top-level-relationship', 'requires,recommends,suggests';
+  ## Every phase and relationship.
+  if ($cpm_has_top_level) {
+    push @cpm_cmd, '--top-level-phase', 'configure,build,test,runtime,develop';
+    push @cpm_cmd, '--top-level-relationship', 'requires,recommends,suggests';
+  }
+  else {
+    push @cpm_cmd, '--with-develop', '--with-configure', '--with-suggests';
+  }
 }
 else {
-  ## Skip suggests, configure, and develop (see --all in the usage above). The old
-  ## --without-develop/--without-suggests flags are deprecated and, since current cpm
-  ## defaults the configure phase on, no longer skipped configure - spell it out here.
-  push @cpm_cmd, '--top-level-phase', 'build,test,runtime';
-  push @cpm_cmd, '--top-level-relationship', 'requires';
+  ## Skip suggests, configure, and develop (see --all in the usage above).
+  if ($cpm_has_top_level) {
+    push @cpm_cmd, '--top-level-phase', 'build,test,runtime';
+    push @cpm_cmd, '--top-level-relationship', 'requires';
+  }
+  else {
+    push @cpm_cmd, '--without-develop', '--without-suggests';
+  }
   push @carton_cmd, '--without', 'develop,configure,suggests';
 }
 
@@ -227,6 +247,16 @@ sub run_cmd {
   system(@_);
   return 0 if $? == 0;
   return $? >> 8;
+}
+
+### Does the cpm on PATH understand the new --top-level-phase/--top-level-relationship
+### flags? Older cpm errors "Unknown option: top-level-phase" during option parsing (before
+### any install/network work). We probe from a fresh empty dir - no cpanfile there, so even
+### a new cpm that parses the flags fine finds nothing to do and exits without installing.
+sub cpm_supports_top_level {
+  my $probe_dir = tempdir(CLEANUP => 1);
+  my $out = `cd '$probe_dir' && cpm install --top-level-phase runtime --top-level-relationship requires 2>&1`;
+  return $out !~ /Unknown option/i;
 }
 
 ### Copy a file, dying with context if it fails (e.g. read-only destination).
