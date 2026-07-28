@@ -1,0 +1,215 @@
+name: Build and publish images
+
+# Builds every image in the matrix natively on amd64 AND arm64 runners (no QEMU),
+# pushes each arch by digest to BOTH Docker Hub and GitHub Container Registry, then
+# assembles multi-arch manifest lists. The `build` script is the single source of
+# truth for versions, tags and build-args - CI reads them via `build --emit-matrix`.
+#
+# Secrets required:
+#   DOCKERHUB_USERNAME - Docker Hub account/robot with push to melopt/perl-alt
+#   DOCKERHUB_TOKEN    - Docker Hub access token (Read & Write)
+# GHCR uses the built-in GITHUB_TOKEN (needs packages: write, set per job below).
+#
+# NOTE: arm64 native runners (ubuntu-24.04-arm) are free for public repos; on private
+# repos they are billable and may need enabling in the org runner settings.
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "Only build images whose primary tag matches this regex (blank = all)"
+        required: false
+        default: ""
+  push:
+    branches: [master]
+    paths:
+      - "Dockerfile.*"
+      - "build"
+      - "scripts/**"
+      - "bin/**"
+      - "layers/**"
+      - "cpanfile*"
+      - ".github/workflows/publish.yml"
+  schedule:
+    # Weekly, Monday 04:17 UTC - rebuild to pick up base-image security patches.
+    - cron: "17 4 * * 1"
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOCKERHUB_REPO: melopt/perl-alt
+  GHCR_REPO: ghcr.io/${{ github.repository_owner }}/perl-alt
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.plan.outputs.images }}
+      buildargs: ${{ steps.plan.outputs.buildargs }}
+      created: ${{ steps.plan.outputs.created }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify pinned checksums (cpm + Lambda RIE)
+        run: |
+          out="$(perl build --check)"
+          echo "$out"
+          if echo "$out" | grep -qE 'out-of-date|download-failed'; then
+            echo "::error::a pinned checksum is out of date or could not be fetched - update ./build"
+            exit 1
+          fi
+
+      - name: Emit build plan (single source of truth = ./build)
+        id: plan
+        run: |
+          plan="$(perl build --emit-matrix)"
+          # optional workflow_dispatch filter on the primary tag
+          filter='${{ github.event.inputs.filter }}'
+          if [ -n "$filter" ]; then
+            plan="$(echo "$plan" | jq --arg re "$filter" \
+              '.images |= map(select(.tags[0] | test($re)))')"
+          fi
+          {
+            echo "images=$(echo "$plan" | jq -c '.images')"
+            echo "buildargs=$(echo "$plan" | jq -c '.buildargs')"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Planned images:"; echo "$plan" | jq -r '.images[].tags[0]'
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.prepare.outputs.images) }}
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    name: build ${{ matrix.image.tags[0] }} (${{ matrix.arch }})
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble build-args
+        id: args
+        run: |
+          {
+            echo 'args<<__ARGS__'
+            echo 'BASE=${{ matrix.image.base }}'
+            echo '${{ needs.prepare.outputs.buildargs }}' | jq -r 'to_entries[] | "\(.key)=\(.value)"'
+            echo '__ARGS__'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push by digest (both registries)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          target: ${{ matrix.image.target }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: ${{ steps.args.outputs.args }}
+          provenance: false
+          labels: |
+            maintainer=Pedro Melo <melo@simplicidade.org>
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ needs.prepare.outputs.created }}
+          outputs: 'type=image,"name=${{ env.DOCKERHUB_REPO }},${{ env.GHCR_REPO }}",push-by-digest=true,name-canonical=true,push=true'
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image.tags[0] }}-${{ matrix.arch }}
+          path: /tmp/digests/${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [prepare, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.prepare.outputs.images) }}
+    runs-on: ubuntu-latest
+    name: merge ${{ matrix.image.tags[0] }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download this image's per-arch digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-${{ matrix.image.tags[0] }}-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifest lists on both registries
+        run: |
+          set -euo pipefail
+          # One digest file per arch, content = sha256:... . Require both so we never
+          # silently publish a single-arch tag over a multi-arch one.
+          count=$(find /tmp/digests -type f | wc -l | tr -d ' ')
+          if [ "$count" -lt 2 ]; then
+            echo "::error::expected 2 arch digests for ${{ matrix.image.tags[0] }}, got $count (a build arch failed?)"
+            exit 1
+          fi
+          digests="$(cat /tmp/digests/*)"
+          tags='${{ join(matrix.image.tags, ' ') }}'
+
+          for repo in "${DOCKERHUB_REPO}" "${GHCR_REPO}"; do
+            srcs=""; for d in $digests; do srcs="$srcs ${repo}@${d}"; done
+            targs=""; for t in $tags;    do targs="$targs -t ${repo}:${t}"; done
+            echo ">>> $repo :$targs"
+            # word-splitting of $targs/$srcs into separate args is intentional
+            # shellcheck disable=SC2086
+            docker buildx imagetools create $targs $srcs
+          done
+
+      - name: Show published manifests
+        run: |
+          set -euo pipefail
+          primary='${{ matrix.image.tags[0] }}'
+          for repo in "${DOCKERHUB_REPO}" "${GHCR_REPO}"; do
+            echo "=== ${repo}:${primary} ==="
+            docker buildx imagetools inspect "${repo}:${primary}" | grep -iE 'platform|name:' || true
+          done

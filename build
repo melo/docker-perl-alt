@@ -10,11 +10,12 @@ use Digest::SHA;
 use POSIX ();
 
 sub usage {
-  die "Usage: $0 [--push] [--filter=s] [--check]\n";
+  die "Usage: $0 [--push] [--filter=s] [--check] [--emit-matrix]\n";
 }
 
 my %cfg = (repo => 'melopt/perl-alt');
-GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s', 'multiplatform', 'check', 'debug') or usage();
+GetOptions(\%cfg, 'help|?', 'push', 'filter=s', 'repo=s', 'multiplatform', 'check', 'debug', 'emit-matrix')
+  or usage();
 usage() if $cfg{help};
 
 my $repo = $cfg{repo};
@@ -24,7 +25,8 @@ my $repo = $cfg{repo};
 ## land on all targets/bases without touching any Dockerfile.
 my %git = git_provenance();
 $git{created} = POSIX::strftime('%Y-%m-%dT%H:%M:%SZ', gmtime);    # RFC 3339 UTC
-print ">>>> provenance: source=$git{source} revision=$git{revision} created=$git{created}\n\n";
+## to STDERR so it never pollutes machine-readable stdout (e.g. --emit-matrix)
+print STDERR ">>>> provenance: source=$git{source} revision=$git{revision} created=$git{created}\n\n";
 
 sub git_provenance {
   chomp(my $sha    = qx{git rev-parse HEAD 2>/dev/null});
@@ -58,6 +60,56 @@ my @versions = (
   ['chainguard', 'latest', 'latest', undef, 'cgr.dev/chainguard/wolfi-base'],
 );
 
+## (family, target) pairs we deliberately do NOT build. The chainguard devel/reply
+## targets pull in Perl::LanguageServer -> Coro, which fails to compile against wolfi's
+## perl 5.44 (see the KNOWN LIMITATION note in Dockerfile.chainguard). Skipping them
+## keeps a full `./build` (and the CI matrix) from dying on an unbuildable target.
+my %skip = (chainguard => { devel => 1, reply => 1 });
+sub is_skipped { my ($f, $target) = @_; return $skip{$f} && $skip{$f}{$target} }
+
+## Single source of truth for what gets built and how it is tagged. Returns a list of
+## image specs, each with the registry-agnostic tag suffixes (CI prefixes them with each
+## registry/repo; the local build loop prefixes with "$repo:"). Both the local build and
+## `--emit-matrix` consume this, so tags never drift between them.
+sub image_matrix {
+  my @out;
+  for my $spec (@versions) {
+    my ($f, $t, $v, $x, $bi) = @$spec;
+    $bi = $f unless $bi;
+
+    my $baset = "$f-$t";
+    my $basev = "$f-$v";
+
+    for my $target (qw( devel build runtime reply )) {
+      next if is_skipped($f, $target);
+
+      my $tagx = $x                         ? $target  : '';
+      my $tagl = $x && $target eq 'runtime' ? 'latest'  : '';
+
+      my @suffixes = ("$baset-$target", "$basev-$target");
+      push @suffixes, $tagx  if $tagx;
+      push @suffixes, $tagl  if $tagl;
+      push @suffixes, $baset if $target eq 'devel';
+
+      ## dedupe, preserving order: when moniker == version (alpine-edge,
+      ## chainguard-latest) the -t and -v suffixes collapse to the same string.
+      my %seen;
+      @suffixes = grep { !$seen{$_}++ } @suffixes;
+
+      push @out,
+        { family     => $f,
+          moniker    => $t,
+          version    => $v,
+          target     => $target,
+          base       => "$bi:$v",
+          dockerfile => "Dockerfile.$f",
+          tags       => \@suffixes,
+        };
+    }
+  }
+  return @out;
+}
+
 ## cpm installer (fatpacked skaji/cpm) - single source of truth, passed to all Dockerfiles
 my %cpm = (
   url  => 'https://raw.githubusercontent.com/skaji/cpm/main/cpm',
@@ -84,6 +136,26 @@ if ($cfg{check}) {
     my ($url, $wanted) = $lambda_runtime_versions{$arch}->@*;
     check_hash($arch, $url, 256, $wanted);
   }
+  exit(0);
+}
+
+## Emit the build plan as JSON for the GitHub Actions pipeline (see
+## .github/workflows/publish.yml). This is the single source of truth: CI never
+## hard-codes versions, tags, or build-args - it reads them from here.
+if ($cfg{'emit-matrix'}) {
+  require JSON::PP;
+  my $plan = {
+    buildargs => {
+      CPM_URL                    => $cpm{url},
+      CPM_SHA1                   => $cpm{sha1},
+      AWS_LAMBDA_RIE_URL_aarch64 => $lambda_runtime_versions{aarch64}[0],
+      AWS_LAMBDA_RIE_SIG_aarch64 => $lambda_runtime_versions{aarch64}[1],
+      AWS_LAMBDA_RIE_URL_x86_64  => $lambda_runtime_versions{x86_64}[0],
+      AWS_LAMBDA_RIE_SIG_x86_64  => $lambda_runtime_versions{x86_64}[1],
+    },
+    images => [image_matrix()],
+  };
+  print JSON::PP->new->canonical->encode($plan), "\n";
   exit(0);
 }
 
@@ -149,68 +221,46 @@ if ($cfg{multiplatform}) {
   sleep(5);
 }
 
-for my $spec (@versions) {
-  my ($f, $t, $v, $x, $bi) = @$spec;
-  $bi = $f unless $bi;
+for my $img (image_matrix()) {
+  my ($f, $target, $v) = @{$img}{qw( family target version )};
+  my @itags = map {"$repo:$_"} @{ $img->{tags} };
+  my $tagt  = $itags[0];
 
-  my $baset = "$repo:$f-$t";
-  my $basev = "$repo:$f-$v";
+  if ($cfg{filter} and $tagt !~ m/$cfg{filter}/) {
+    print ">>>>>>>> Skipped via filter '$cfg{filter}': $tagt\n";
+    next;
+  }
 
+  print ">>>> target $target, base $v: $_\n" for @itags;
+  print "\n";
 
-  my @tags;
-  for my $target (qw( devel build runtime reply )) {
-    my $tagt = "$baset-$target";
-    my $tagv = "$basev-$target";
-    my $tagx = $x                         ? "$target" : "";
-    my $tagl = $x && $target eq 'runtime' ? "latest"  : "";
+  my @cmd = ($docker_cmd, 'build');
+  push @cmd, '--progress', 'plain' if $cfg{debug};
+  push @cmd, @plats if @plats;
+  push @cmd, '--target' => $target;
+  push @cmd, '--file'   => $img->{dockerfile};
+  push @cmd, map { ('--tag', $_) } @itags;
+  push @cmd,
+    '--label' => 'maintainer=Pedro Melo <melo@simplicidade.org>',
+    '--label' => "org.opencontainers.image.source=$git{source}",
+    '--label' => "org.opencontainers.image.url=$git{source}",
+    '--label' => "org.opencontainers.image.revision=$git{revision}",
+    '--label' => "org.opencontainers.image.created=$git{created}";
+  push @cmd,
+    '--build-arg' => "BASE=$img->{base}",
+    '--build-arg' => "CPM_URL=$cpm{url}",
+    '--build-arg' => "CPM_SHA1=$cpm{sha1}",
+    '--build-arg' => "AWS_LAMBDA_RIE_URL_aarch64=$lambda_runtime_versions{aarch64}[0]",
+    '--build-arg' => "AWS_LAMBDA_RIE_SIG_aarch64=$lambda_runtime_versions{aarch64}[1]",
+    '--build-arg' => "AWS_LAMBDA_RIE_URL_x86_64=$lambda_runtime_versions{x86_64}[0]",
+    '--build-arg' => "AWS_LAMBDA_RIE_SIG_x86_64=$lambda_runtime_versions{x86_64}[1]";
+  push @cmd, '.';
 
-    if ($cfg{filter} and $tagt !~ m/$cfg{filter}/) {
-      print ">>>>>>>> Skipped via filter '$cfg{filter}'\n";
-      next;
-    }
+  my $err = my_system(@cmd);
+  die "FATAL: failed to build Docker image for target $target, base $v: $tagt\n" if $err;
 
-    print ">>>> target $target, base $v: $tagt\n";
-    print ">>>> target $target, base $v: $tagv\n";
-    print ">>>> also tagged: $tagx\n" if $tagx;
-    print ">>>> also tagged: $tagl\n" if $tagl;
-    print "\n";
-
-    my @itags = ($tagt, $tagv);
-    push @itags, $tagx  if $tagx;
-    push @itags, $tagl  if $tagl;
-    push @itags, $baset if $target eq "devel";
-
-    my @cmd = ($docker_cmd, 'build');
-    push @cmd, '--progress', 'plain' if $cfg{debug};
-    push @cmd, @plats if @plats;
-    push @cmd, '--target' => $target;
-    push @cmd, '--file'   => "Dockerfile.$f";
-    push @cmd, map { ('--tag', $_) } @itags;
-    push @cmd,
-      '--label' => 'maintainer=Pedro Melo <melo@simplicidade.org>',
-      '--label' => "org.opencontainers.image.source=$git{source}",
-      '--label' => "org.opencontainers.image.url=$git{source}",
-      '--label' => "org.opencontainers.image.revision=$git{revision}",
-      '--label' => "org.opencontainers.image.created=$git{created}";
-    push @cmd,
-      '--build-arg' => "BASE=$bi:$v",
-      '--build-arg' => "CPM_URL=$cpm{url}",
-      '--build-arg' => "CPM_SHA1=$cpm{sha1}",
-      '--build-arg' => "AWS_LAMBDA_RIE_URL_aarch64=$lambda_runtime_versions{aarch64}[0]",
-      '--build-arg' => "AWS_LAMBDA_RIE_SIG_aarch64=$lambda_runtime_versions{aarch64}[1]",
-      '--build-arg' => "AWS_LAMBDA_RIE_URL_x86_64=$lambda_runtime_versions{x86_64}[0]",
-      '--build-arg' => "AWS_LAMBDA_RIE_SIG_x86_64=$lambda_runtime_versions{x86_64}[1]";
-    push @cmd, '.';
-
-    my $err = my_system(@cmd);
-    die "FATAL: failed to build Docker image for target $target, base $v: $tagt\n" if $err;
-
-    push @tags, @itags;
-
-    if ($cfg{push}) {
-      my_system($docker_cmd, 'push', @plats, $_) for @tags;
-      @tags = ();
-    }
+  if ($cfg{push}) {
+    my_system($docker_cmd, 'push', @plats, $_) for @itags;
   }
 }
 

@@ -83,6 +83,31 @@ app work directory, and tweak the `apk add` lines to make sure that
 you add any packaged dependencies you might need. If you don't need
 any package dependencies, you can just remove those lines altogether.
 
+### Where the images are published ###
+
+The images are published to **two registries** with identical tags on
+both, so you can use whichever you prefer:
+
+* Docker Hub &mdash;
+  [`melopt/perl-alt`](https://hub.docker.com/r/melopt/perl-alt):
+
+      docker pull melopt/perl-alt:perl-latest-runtime
+
+* GitHub Container Registry &mdash;
+  [`ghcr.io/melo/perl-alt`](https://github.com/melo/docker-perl-alt/pkgs/container/perl-alt):
+
+      docker pull ghcr.io/melo/perl-alt:perl-latest-runtime
+
+The `Dockerfile` examples below use the Docker Hub names. To pull from
+GHCR instead, just swap the `melopt/perl-alt` prefix for
+`ghcr.io/melo/perl-alt` &mdash; the tag suffixes (`-build`, `-runtime`,
+`-devel`, &hellip;) are the same on both.
+
+Both registries carry the same multi-arch (`linux/amd64` +
+`linux/arm64`) images, built natively per-architecture and pushed by the
+GitHub Actions workflow at
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+
 ```Dockerfile
 ### First stage, just to add our package dependencies. We put this on a
 ### separate stage to be able to reuse them across the "build" and
@@ -500,6 +525,40 @@ REPORT RequestId: 3503ccbd-0dfc-4eba-99f7-5aa72b58692b	Init Duration: 0.36 ms	Du
 ```
 
 For a fully working example see [test/lambda][lambda-test] inside this repository.
+
+
+## Publishing (maintainers) ##
+
+The [`build`](build) script is the single source of truth for the image
+matrix: the base versions, the tag scheme, the pinned `cpm` and Lambda
+RIE checksums, and the OCI labels. `./build --check` verifies the pinned
+checksums against their live sources; `./build --emit-matrix` prints the
+whole plan as JSON.
+
+Images are built and pushed by GitHub Actions
+([`.github/workflows/publish.yml`](.github/workflows/publish.yml)), which
+consumes `build --emit-matrix` so it never re-hardcodes any of the above.
+It builds every image **natively** on `amd64` and `arm64` runners (no
+QEMU), pushes each architecture by digest to both registries, and then
+assembles the multi-arch manifest lists. It runs on pushes to `master`
+that touch the build inputs, on a weekly schedule (to pick up base-image
+security patches), and on manual dispatch (with an optional tag filter).
+
+Two secrets are required for the Docker Hub push:
+
+* `DOCKERHUB_USERNAME` &mdash; account (or robot) with push access to
+  `melopt/perl-alt`;
+* `DOCKERHUB_TOKEN` &mdash; a Docker Hub access token with Read & Write.
+
+The GHCR push uses the built-in `GITHUB_TOKEN` (the jobs request
+`packages: write`); the first run creates the `perl-alt` package, which
+you may want to flip from private to public in the repository's package
+settings.
+
+The Chainguard `devel`/`reply` targets are deliberately excluded from the
+matrix &mdash; they pull in `Coro`, which does not compile against
+wolfi's perl 5.44 (see the note in
+[`Dockerfile.chainguard`](Dockerfile.chainguard)).
 
 
 ## Repository ##
